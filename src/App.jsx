@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
+import * as XLSX from 'xlsx'
 import './App.css'
 
 function App() {
@@ -124,6 +125,60 @@ useEffect(() => {
   if (perfil?.negocio_id) cargarProductos(perfil.negocio_id)
 }, [perfil?.negocio_id])
 
+const generarSkuAutomatico = (nombreProducto) => {
+  const limpio = nombreProducto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 ]/g, '')
+    .trim()
+    .toUpperCase()
+
+  if (!limpio) return ''
+
+  const palabras = limpio.split(/\s+/).filter(Boolean)
+  let prefijo = ''
+
+  if (palabras.length === 1) {
+    prefijo = palabras[0].slice(0, 3)
+  } else {
+    prefijo = palabras
+      .slice(0, 3)
+      .map((palabra) => palabra.charAt(0))
+      .join('')
+
+    if (prefijo.length < 3) {
+      prefijo = limpio.replace(/\s+/g, '').slice(0, 3)
+    }
+  }
+
+  const numerosUsados = productos
+    .map((producto) => producto.sku || '')
+    .filter((sku) => sku.startsWith(`${prefijo}-`))
+    .map((sku) => Number(sku.split('-').pop()))
+    .filter((numero) => Number.isInteger(numero))
+
+  const siguienteNumero =
+    numerosUsados.length > 0 ? Math.max(...numerosUsados) + 1 : 1
+
+  return `${prefijo}-${String(siguienteNumero).padStart(3, '0')}`
+}
+
+const cambiarNombreProducto = (valor) => {
+  setProductoForm((actual) => {
+    const skuAnteriorAutomatico = generarSkuAutomatico(actual.nombre)
+    const skuFueEditadoManualmente =
+      actual.sku !== '' && actual.sku !== skuAnteriorAutomatico
+
+    return {
+      ...actual,
+      nombre: valor,
+      sku: skuFueEditadoManualmente
+        ? actual.sku
+        : generarSkuAutomatico(valor),
+    }
+  })
+}
+
 const guardarProducto = async (e) => {
   e.preventDefault()
   setMensajeProducto('')
@@ -171,6 +226,57 @@ const guardarProducto = async (e) => {
     setMensajeProducto('Producto guardado correctamente.')
   }
   setGuardandoProducto(false)
+}
+
+const exportarProductosExcel = () => {
+  setMensajeProducto('')
+
+  if (productos.length === 0) {
+    setMensajeProducto('No hay productos para exportar.')
+    return
+  }
+
+  const datosExcel = productos.map((producto) => {
+    const stock = Number(producto.stock || 0)
+    const stockMinimo = Number(producto.stock_minimo || 0)
+
+    return {
+      Producto: producto.nombre,
+      SKU: producto.sku || '',
+      Categoría: producto.categoria || '',
+      'Precio de venta': Number(producto.precio_venta || 0),
+      Costo: Number(producto.costo || 0),
+      Stock: stock,
+      'Stock mínimo': stockMinimo,
+      Estado: stock <= stockMinimo ? 'Stock bajo' : 'Disponible',
+    }
+  })
+
+  const hoja = XLSX.utils.json_to_sheet(datosExcel)
+
+  hoja['!cols'] = [
+    { wch: 30 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 16 },
+  ]
+
+  const libro = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(libro, hoja, 'Productos')
+
+  const hoy = new Date()
+  const fecha = [
+    String(hoy.getDate()).padStart(2, '0'),
+    String(hoy.getMonth() + 1).padStart(2, '0'),
+    hoy.getFullYear(),
+  ].join('-')
+
+  XLSX.writeFile(libro, `NOREVIK_Productos_${fecha}.xlsx`)
+  setMensajeProducto('Excel exportado correctamente.')
 }
 
   // =========================
@@ -634,9 +740,26 @@ if (usuario) {
                   </p>
                 </div>
 
-                <button type="button" onClick={() => { setMostrarFormularioProducto(true); setMensajeProducto('') }}>
-                  + Agregar producto
-                </button>
+                <div className="product-heading-actions">
+                  <button
+                    type="button"
+                    className="export-excel-button"
+                    onClick={exportarProductosExcel}
+                    disabled={productos.length === 0}
+                  >
+                    Exportar Excel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarFormularioProducto(true)
+                      setMensajeProducto('')
+                    }}
+                  >
+                    + Agregar producto
+                  </button>
+                </div>
 
               </div>
 
@@ -645,8 +768,8 @@ if (usuario) {
               {mostrarFormularioProducto && (
                 <form onSubmit={guardarProducto} className="product-form">
                   <div className="product-form-grid">
-                    <div className="form-group"><label>Nombre del producto *</label><input type="text" value={productoForm.nombre} onChange={(e) => setProductoForm({ ...productoForm, nombre: e.target.value })} placeholder="Ej: Cuaderno universitario" /></div>
-                    <div className="form-group"><label>SKU / Código</label><input type="text" value={productoForm.sku} onChange={(e) => setProductoForm({ ...productoForm, sku: e.target.value })} placeholder="Ej: CUAD-001" /></div>
+                    <div className="form-group"><label>Nombre del producto *</label><input type="text" value={productoForm.nombre} onChange={(e) => cambiarNombreProducto(e.target.value)} placeholder="Ej: Cuaderno universitario" /></div>
+                    <div className="form-group"><label>SKU / Código</label><input type="text" value={productoForm.sku} onChange={(e) => setProductoForm({ ...productoForm, sku: e.target.value })} placeholder="Se genera automáticamente" /></div>
                     <div className="form-group"><label>Categoría</label><input type="text" value={productoForm.categoria} onChange={(e) => setProductoForm({ ...productoForm, categoria: e.target.value })} placeholder="Ej: Librería" /></div>
                     <div className="form-group"><label>Precio de venta *</label><input type="number" min="0" step="1" value={productoForm.precio_venta} onChange={(e) => setProductoForm({ ...productoForm, precio_venta: e.target.value })} placeholder="0" /></div>
                     <div className="form-group"><label>Costo</label><input type="number" min="0" step="1" value={productoForm.costo} onChange={(e) => setProductoForm({ ...productoForm, costo: e.target.value })} placeholder="0" /></div>
