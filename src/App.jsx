@@ -117,6 +117,20 @@ const [perfil, setPerfil] = useState(null)
     contacto: '',
   })
 
+  // COMPRAS
+  const [compras, setCompras] = useState([])
+  const [busquedaCompra, setBusquedaCompra] = useState('')
+  const [proveedorCompraId, setProveedorCompraId] = useState('')
+  const [metodoPagoCompra, setMetodoPagoCompra] = useState('transferencia')
+  const [numeroDocumentoCompra, setNumeroDocumentoCompra] = useState('')
+  const [observacionesCompra, setObservacionesCompra] = useState('')
+  const [carritoCompra, setCarritoCompra] = useState([])
+  const [guardandoCompra, setGuardandoCompra] = useState(false)
+  const [mensajeCompra, setMensajeCompra] = useState('')
+  const [compraDetalle, setCompraDetalle] = useState(null)
+  const [compraPorAnular, setCompraPorAnular] = useState(null)
+  const [anulandoCompra, setAnulandoCompra] = useState(false)
+
   // =========================
   // COMPROBAR SESIÓN
   // =========================
@@ -1543,6 +1557,224 @@ const formatearFechaVenta = (fecha) => {
   }
 
   // =========================
+  // COMPRAS
+  // =========================
+
+  const cargarCompras = async (negocioId) => {
+    if (!negocioId) return
+
+    const { data, error } = await supabase
+      .from('compras')
+      .select(`
+        id,
+        total,
+        metodo_pago,
+        numero_documento,
+        observaciones,
+        estado,
+        creado_en,
+        proveedor_id,
+        proveedores (
+          nombre,
+          rut
+        ),
+        detalle_compras (
+          id,
+          cantidad,
+          costo_unitario,
+          subtotal,
+          productos (
+            nombre,
+            sku
+          )
+        )
+      `)
+      .eq('negocio_id', negocioId)
+      .order('creado_en', { ascending: false })
+      .limit(50)
+
+    if (error) {
+      console.error('Error cargando compras:', error)
+      setMensajeCompra('No se pudo cargar el historial de compras.')
+      return
+    }
+
+    setCompras(data ?? [])
+  }
+
+  useEffect(() => {
+    if (perfil?.negocio_id) cargarCompras(perfil.negocio_id)
+  }, [perfil?.negocio_id])
+
+  useEffect(() => {
+    if (!mensajeCompra) return
+    const timer = setTimeout(() => setMensajeCompra(''), 3000)
+    return () => clearTimeout(timer)
+  }, [mensajeCompra])
+
+  const agregarProductoCompra = (producto) => {
+    setMensajeCompra('')
+    setCarritoCompra((actual) => {
+      if (actual.some((item) => item.id === producto.id)) return actual
+      return [
+        ...actual,
+        {
+          ...producto,
+          cantidadCompra: 1,
+          costoCompra: Number(producto.costo || 0),
+        },
+      ]
+    })
+  }
+
+  const cambiarCantidadCompra = (productoId, valor) => {
+    const cantidad = Math.max(1, parseInt(valor || '1', 10))
+    setCarritoCompra((actual) =>
+      actual.map((item) =>
+        item.id === productoId ? { ...item, cantidadCompra: cantidad } : item
+      )
+    )
+  }
+
+  const cambiarCostoCompra = (productoId, valor) => {
+    setCarritoCompra((actual) =>
+      actual.map((item) =>
+        item.id === productoId ? { ...item, costoCompra: valor } : item
+      )
+    )
+  }
+
+  const quitarProductoCompra = (productoId) => {
+    setCarritoCompra((actual) => actual.filter((item) => item.id !== productoId))
+  }
+
+  const totalCompra = carritoCompra.reduce(
+    (total, item) =>
+      total +
+      Number(item.cantidadCompra || 0) * Number(item.costoCompra || 0),
+    0
+  )
+
+  const registrarCompra = async (e) => {
+    e.preventDefault()
+    setMensajeCompra('')
+
+    if (!proveedorCompraId) {
+      setMensajeCompra('Selecciona un proveedor.')
+      return
+    }
+
+    if (carritoCompra.length === 0) {
+      setMensajeCompra('Agrega al menos un producto a la compra.')
+      return
+    }
+
+    const productosCompra = carritoCompra.map((item) => ({
+      producto_id: item.id,
+      cantidad: Number(item.cantidadCompra),
+      costo_unitario: Number(item.costoCompra),
+    }))
+
+    if (
+      productosCompra.some(
+        (item) =>
+          !Number.isInteger(item.cantidad) ||
+          item.cantidad <= 0 ||
+          Number.isNaN(item.costo_unitario) ||
+          item.costo_unitario < 0
+      )
+    ) {
+      setMensajeCompra('Revisa las cantidades y costos de la compra.')
+      return
+    }
+
+    setGuardandoCompra(true)
+
+    const { error } = await supabase.rpc('registrar_compra', {
+      p_proveedor_id: proveedorCompraId,
+      p_metodo_pago: metodoPagoCompra,
+      p_productos: productosCompra,
+      p_numero_documento: numeroDocumentoCompra.trim() || null,
+      p_observaciones: observacionesCompra.trim() || null,
+    })
+
+    if (error) {
+      console.error('Error registrando compra:', error)
+      setMensajeCompra(error.message)
+      setGuardandoCompra(false)
+      return
+    }
+
+    await Promise.all([
+      cargarProductos(perfil.negocio_id),
+      cargarMovimientosInventario(perfil.negocio_id),
+      cargarCompras(perfil.negocio_id),
+    ])
+
+    setCarritoCompra([])
+    setProveedorCompraId('')
+    setMetodoPagoCompra('transferencia')
+    setNumeroDocumentoCompra('')
+    setObservacionesCompra('')
+    setBusquedaCompra('')
+    setMensajeCompra('Compra registrada. El stock y costo promedio fueron actualizados.')
+    setGuardandoCompra(false)
+  }
+
+  const abrirDetalleCompra = (compra) => {
+    setCompraDetalle(compra)
+    setMensajeCompra('')
+  }
+
+  const cerrarDetalleCompra = () => {
+    if (anulandoCompra) return
+    setCompraDetalle(null)
+  }
+
+  const solicitarAnulacionCompra = (compra) => {
+    if (!compra || compra.estado === 'anulada') return
+    setCompraPorAnular(compra)
+  }
+
+  const cerrarConfirmacionAnulacionCompra = () => {
+    if (anulandoCompra) return
+    setCompraPorAnular(null)
+  }
+
+  const anularCompra = async () => {
+    const compra = compraPorAnular
+
+    if (!compra || compra.estado === 'anulada') return
+
+    setAnulandoCompra(true)
+    setMensajeCompra('')
+
+    const { error } = await supabase.rpc('anular_compra', {
+      p_compra_id: compra.id,
+    })
+
+    if (error) {
+      console.error('Error anulando compra:', error)
+      setMensajeCompra(error.message)
+      setAnulandoCompra(false)
+      return
+    }
+
+    await Promise.all([
+      cargarProductos(perfil.negocio_id),
+      cargarMovimientosInventario(perfil.negocio_id),
+      cargarCompras(perfil.negocio_id),
+    ])
+
+    setCompraDetalle(null)
+    setCompraPorAnular(null)
+    setMensajeCompra(
+      'Compra anulada correctamente. Las unidades fueron descontadas del inventario.'
+    )
+    setAnulandoCompra(false)
+  }
+
+  // =========================
   // CREAR CUENTA
   // =========================
 
@@ -1785,6 +2017,16 @@ if (usuario) {
 
     if (!termino) return true
 
+    return (
+      producto.nombre?.toLowerCase().includes(termino) ||
+      producto.sku?.toLowerCase().includes(termino) ||
+      producto.categoria?.toLowerCase().includes(termino)
+    )
+  })
+
+  const productosCompraFiltrados = productos.filter((producto) => {
+    const termino = busquedaCompra.trim().toLowerCase()
+    if (!termino) return true
     return (
       producto.nombre?.toLowerCase().includes(termino) ||
       producto.sku?.toLowerCase().includes(termino) ||
@@ -2040,6 +2282,13 @@ if (usuario) {
           >
             <span>🚚</span>
             Proveedores
+          </button>
+          <button
+            className={`menu-item ${seccion === 'compras' ? 'active' : ''}`}
+            onClick={() => setSeccion('compras')}
+          >
+            <span>🛒</span>
+            Compras
           </button>
 
         </nav>
@@ -4260,6 +4509,456 @@ if (usuario) {
               </div>
             )}
           </>
+        )}
+
+
+        {seccion === 'compras' && (
+          <section className="clients-section">
+            <div className="clients-heading">
+              <div>
+                <span className="section-kicker">COMPRAS</span>
+                <h2>Compras a proveedores</h2>
+                <p>Registra mercadería comprada y actualiza el inventario automáticamente.</p>
+              </div>
+            </div>
+
+            {mensajeCompra && (
+              <div className="product-message">{mensajeCompra}</div>
+            )}
+
+            <div className="clients-panel">
+              <form onSubmit={registrarCompra} className="client-form">
+                <div className="client-form-grid">
+                  <label>
+                    Proveedor *
+                    <select
+                      value={proveedorCompraId}
+                      onChange={(e) => setProveedorCompraId(e.target.value)}
+                      required
+                    >
+                      <option value="">Seleccionar proveedor</option>
+                      {proveedores.map((proveedor) => (
+                        <option key={proveedor.id} value={proveedor.id}>
+                          {proveedor.nombre} · {proveedor.rut}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Método de pago *
+                    <select
+                      value={metodoPagoCompra}
+                      onChange={(e) => setMetodoPagoCompra(e.target.value)}
+                    >
+                      <option value="efectivo">Efectivo</option>
+                      <option value="debito">Débito</option>
+                      <option value="credito">Crédito</option>
+                      <option value="transferencia">Transferencia</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Documento / Folio
+                    <input
+                      type="text"
+                      value={numeroDocumentoCompra}
+                      onChange={(e) => setNumeroDocumentoCompra(e.target.value)}
+                      placeholder="Ej: Factura 1548"
+                    />
+                  </label>
+
+                  <label>
+                    Observaciones
+                    <input
+                      type="text"
+                      value={observacionesCompra}
+                      onChange={(e) => setObservacionesCompra(e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </label>
+                </div>
+
+                <div className="clients-heading" style={{ marginTop: 20 }}>
+                  <div>
+                    <strong>Agregar productos</strong>
+                    <p>Busca un producto existente y agrégalo a la compra.</p>
+                  </div>
+                </div>
+
+                <input
+                  className="clients-search"
+                  type="search"
+                  value={busquedaCompra}
+                  onChange={(e) => setBusquedaCompra(e.target.value)}
+                  placeholder="Buscar por producto, SKU o categoría..."
+                />
+
+                <div className="inventory-table-wrap" style={{ marginTop: 12 }}>
+                  <table className="inventory-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>SKU</th>
+                        <th>Stock actual</th>
+                        <th>Costo actual</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productosCompraFiltrados.slice(0, 12).map((producto) => (
+                        <tr key={producto.id}>
+                          <td>{producto.nombre}</td>
+                          <td>{producto.sku || '—'}</td>
+                          <td>{producto.stock}</td>
+                          <td>${Number(producto.costo || 0).toLocaleString('es-CL')}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => agregarProductoCompra(producto)}
+                              disabled={carritoCompra.some((item) => item.id === producto.id)}
+                            >
+                              {carritoCompra.some((item) => item.id === producto.id)
+                                ? 'Agregado'
+                                : '+ Agregar'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="inventory-table-wrap" style={{ marginTop: 24 }}>
+                  <table className="inventory-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Costo unitario</th>
+                        <th>Subtotal</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {carritoCompra.length === 0 ? (
+                        <tr>
+                          <td colSpan="5">Aún no has agregado productos.</td>
+                        </tr>
+                      ) : (
+                        carritoCompra.map((item) => (
+                          <tr key={item.id}>
+                            <td>
+                              <strong>{item.nombre}</strong>
+                              <div>{item.sku || 'Sin SKU'}</div>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={item.cantidadCompra}
+                                onChange={(e) =>
+                                  cambiarCantidadCompra(item.id, e.target.value)
+                                }
+                                style={{ width: 90 }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.costoCompra}
+                                onChange={(e) =>
+                                  cambiarCostoCompra(item.id, e.target.value)
+                                }
+                                style={{ width: 130 }}
+                              />
+                            </td>
+                            <td>
+                              ${(
+                                Number(item.cantidadCompra || 0) *
+                                Number(item.costoCompra || 0)
+                              ).toLocaleString('es-CL')}
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="client-delete-button"
+                                onClick={() => quitarProductoCompra(item.id)}
+                              >
+                                Quitar
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 16,
+                    marginTop: 22,
+                  }}
+                >
+                  <div>
+                    <span>Total compra</span>
+                    <h3 style={{ margin: '4px 0 0' }}>
+                      ${Number(totalCompra || 0).toLocaleString('es-CL')}
+                    </h3>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={guardandoCompra || carritoCompra.length === 0}
+                  >
+                    {guardandoCompra ? 'Registrando...' : 'Registrar compra'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="clients-panel" style={{ marginTop: 24 }}>
+              <div className="clients-heading">
+                <div>
+                  <strong>Últimas compras</strong>
+                  <p>Historial reciente de compras registradas.</p>
+                </div>
+              </div>
+
+              <div className="inventory-table-wrap">
+                <table className="inventory-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Proveedor</th>
+                      <th>Documento</th>
+                      <th>Método</th>
+                      <th>Productos</th>
+                      <th>Estado</th>
+                      <th>Total</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compras.length === 0 ? (
+                      <tr>
+                        <td colSpan="8">Aún no hay compras registradas.</td>
+                      </tr>
+                    ) : (
+                      compras.map((compra) => (
+                        <tr key={compra.id}>
+                          <td>{formatearFechaVenta(compra.creado_en)}</td>
+                          <td>{compra.proveedores?.nombre || '—'}</td>
+                          <td>{compra.numero_documento || '—'}</td>
+                          <td className="capitalize">{compra.metodo_pago}</td>
+                          <td>{compra.detalle_compras?.length || 0}</td>
+                          <td>
+                            <span className={`sale-status ${compra.estado}`}>
+                              {compra.estado === 'completada' ? 'Completada' : 'Anulada'}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>
+                              ${Number(compra.total || 0).toLocaleString('es-CL')}
+                            </strong>
+                          </td>
+                          <td>
+                            <div className="sale-row-actions">
+                              <button
+                                type="button"
+                                className="sale-detail-button"
+                                onClick={() => abrirDetalleCompra(compra)}
+                              >
+                                Ver detalle
+                              </button>
+                              {compra.estado !== 'anulada' && (
+                                <button
+                                  type="button"
+                                  className="sale-cancel-button"
+                                  onClick={() => solicitarAnulacionCompra(compra)}
+                                  disabled={anulandoCompra}
+                                >
+                                  Anular
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {compraDetalle && (
+              <div className="sale-modal-backdrop" onClick={cerrarDetalleCompra}>
+                <div
+                  className="sale-detail-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="sale-detail-header">
+                    <div>
+                      <span className="dashboard-label">DETALLE DE COMPRA</span>
+                      <h2>Compra registrada</h2>
+                      <p>{formatearFechaVenta(compraDetalle.creado_en)}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="stock-modal-close"
+                      onClick={cerrarDetalleCompra}
+                      disabled={anulandoCompra}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="sale-detail-summary">
+                    <div>
+                      <span>Proveedor</span>
+                      <strong>{compraDetalle.proveedores?.nombre || '—'}</strong>
+                      {compraDetalle.proveedores?.rut && (
+                        <small>{compraDetalle.proveedores.rut}</small>
+                      )}
+                    </div>
+                    <div>
+                      <span>Documento</span>
+                      <strong>{compraDetalle.numero_documento || 'Sin documento'}</strong>
+                    </div>
+                    <div>
+                      <span>Método de pago</span>
+                      <strong className="capitalize">{compraDetalle.metodo_pago}</strong>
+                    </div>
+                    <div>
+                      <span>Estado</span>
+                      <span className={`sale-status ${compraDetalle.estado}`}>
+                        {compraDetalle.estado === 'completada' ? 'Completada' : 'Anulada'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {compraDetalle.observaciones && (
+                    <div className="norevik-confirm-info" style={{ marginBottom: 18 }}>
+                      <strong>Observaciones:</strong> {compraDetalle.observaciones}
+                    </div>
+                  )}
+
+                  <div className="sale-detail-items">
+                    <div className="sale-detail-items-header">
+                      <span>Producto</span>
+                      <span>Subtotal</span>
+                    </div>
+
+                    {(compraDetalle.detalle_compras || []).map((detalle) => (
+                      <div className="sale-detail-item" key={detalle.id}>
+                        <div>
+                          <strong>{detalle.productos?.nombre || 'Producto'}</strong>
+                          <span>
+                            {detalle.cantidad} × ${Number(detalle.costo_unitario || 0).toLocaleString('es-CL')}
+                            {detalle.productos?.sku ? ` · ${detalle.productos.sku}` : ''}
+                          </span>
+                        </div>
+
+                        <strong>
+                          ${Number(detalle.subtotal || 0).toLocaleString('es-CL')}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="sale-detail-total">
+                    <span>Total de la compra</span>
+                    <strong>
+                      ${Number(compraDetalle.total || 0).toLocaleString('es-CL')}
+                    </strong>
+                  </div>
+
+                  <div className="sale-detail-actions">
+                    <button
+                      type="button"
+                      onClick={cerrarDetalleCompra}
+                      disabled={anulandoCompra}
+                    >
+                      Cerrar
+                    </button>
+
+                    {compraDetalle.estado !== 'anulada' && (
+                      <button
+                        type="button"
+                        className="sale-cancel-confirm"
+                        onClick={() => solicitarAnulacionCompra(compraDetalle)}
+                        disabled={anulandoCompra}
+                      >
+                        {anulandoCompra ? 'Anulando...' : 'Anular compra'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {compraPorAnular && (
+              <div
+                className="sale-modal-backdrop"
+                onClick={cerrarConfirmacionAnulacionCompra}
+              >
+                <div
+                  className="norevik-confirm-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="norevik-confirm-icon">!</div>
+
+                  <span className="dashboard-label">NOREVIK</span>
+                  <h2>Anular compra</h2>
+
+                  <p>
+                    ¿Deseas anular esta compra por{' '}
+                    <strong>
+                      ${Number(compraPorAnular.total || 0).toLocaleString('es-CL')}
+                    </strong>
+                    ?
+                  </p>
+
+                  <div className="norevik-confirm-info">
+                    Las unidades de esta compra serán descontadas del inventario y la
+                    compra quedará marcada como anulada. Si ya no existe stock suficiente,
+                    NOREVIK impedirá la anulación.
+                  </div>
+
+                  <div className="norevik-confirm-actions">
+                    <button
+                      type="button"
+                      className="norevik-confirm-cancel"
+                      onClick={cerrarConfirmacionAnulacionCompra}
+                      disabled={anulandoCompra}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      className="norevik-confirm-danger"
+                      onClick={anularCompra}
+                      disabled={anulandoCompra}
+                    >
+                      {anulandoCompra ? 'Anulando...' : 'Anular compra'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
         )}
 
       </main>

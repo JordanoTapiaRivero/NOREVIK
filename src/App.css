@@ -4603,3 +4603,352 @@ textarea::placeholder {
     width: 100%;
   }
 }
+
+
+/* ========================================
+   COMPRAS NOREVIK
+   Estilos añadidos para el módulo Compras
+======================================== */
+
+/* Paneles blancos del módulo */
+.clients-section .clients-panel {
+  padding: 22px;
+  border: 1px solid #e7e9ed;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+}
+
+/* Encabezados */
+.clients-section > .clients-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.clients-section > .clients-heading h2 {
+  margin: 6px 0 6px;
+  color: #ffffff;
+  font-size: 24px;
+  letter-spacing: -0.5px;
+}
+
+.clients-section > .clients-heading p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.clients-panel .clients-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.clients-panel .clients-heading strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.clients-panel .clients-heading p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* Formulario de compra */
+.clients-panel .client-form {
+  margin-top: 0;
+}
+
+.clients-panel .client-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.clients-panel .client-form-grid > label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.clients-panel .client-form-grid input,
+.clients-panel .client-form-grid select {
+  width: 100%;
+  min-width: 0;
+  height: 43px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
+  outline: none;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.clients-panel .client-form-grid input::placeholder {
+  color: #9ca3af;
+}
+
+.clients-panel .client-form-grid input:focus,
+.clients-panel .client-form-grid select:focus {
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.07);
+}
+
+/* Buscador de productos.
+   En Compras la clase clients-search está aplicada al input directamente. */
+.clients-panel .client-form > input.clients-search {
+  display: block;
+  width: min(520px, 100%);
+  height: 43px;
+  margin: 14px 0 16px;
+  padding: 0 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
+  outline: none;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 12px;
+}
+
+.clients-panel .client-form > input.clients-search::placeholder {
+  color: #9ca3af;
+}
+
+.clients-panel .client-form > input.clients-search:focus {
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.07);
+}
+
+/* Tablas utilizadas por Compras */
+.inventory-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.inventory-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.inventory-table th,
+.inventory-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #eef0f2;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.inventory-table th {
+  background: #f8fafc;
+  color: #7b818b;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.65px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.inventory-table td {
+  color: #5f6672;
+  font-size: 11px;
+}
+
+.inventory-table td strong {
+  color: #111827;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.inventory-table tbody tr {
+  transition: background 0.18s ease;
+}
+
+.inventory-table tbody tr:hover {
+  background: #fafbfc;
+}
+
+.inventory-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Inputs de cantidad y costo dentro del carrito */
+.inventory-table td input[type="number"] {
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  outline: none;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 11px;
+}
+
+.inventory-table td input[type="number"]:focus {
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.06);
+}
+
+/* Botón Agregar */
+.inventory-table .secondary-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db !important;
+  border-radius: 8px;
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.inventory-table .secondary-button:hover:not(:disabled) {
+  border-color: #111827 !important;
+  background: #f8fafc !important;
+}
+
+.inventory-table .secondary-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Botón Quitar */
+.inventory-table .client-delete-button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #b91c1c;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.inventory-table .client-delete-button:hover {
+  background: #fef2f2;
+}
+
+/* Total + botón Registrar compra */
+.clients-panel .client-form > div[style*="justify-content: space-between"] {
+  margin-top: 24px !important;
+  padding: 18px 0 0;
+  border-top: 1px solid #e5e7eb;
+}
+
+.clients-panel .client-form > div[style*="justify-content: space-between"] span {
+  display: block;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.clients-panel .client-form > div[style*="justify-content: space-between"] h3 {
+  color: #111827;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+}
+
+.clients-panel .client-form .primary-button {
+  min-height: 42px;
+  padding: 0 20px;
+  border: 1px solid #111827 !important;
+  border-radius: 9px;
+  background: #111827 !important;
+  color: #ffffff !important;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.clients-panel .client-form .primary-button:hover:not(:disabled) {
+  background: #242d3d !important;
+  border-color: #242d3d !important;
+  transform: translateY(-1px);
+}
+
+.clients-panel .client-form .primary-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Mensaje de Compras */
+.clients-section > .product-message {
+  margin: 0 0 16px;
+  padding: 11px 13px;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* Historial */
+.clients-section .clients-panel + .clients-panel {
+  margin-top: 24px !important;
+}
+
+.clients-section .clients-panel + .clients-panel .inventory-table-wrap {
+  margin-top: 16px;
+}
+
+/* Responsive Compras */
+@media (max-width: 900px) {
+  .clients-panel .client-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .clients-section .clients-panel {
+    padding: 16px;
+  }
+
+  .clients-section > .clients-heading h2 {
+    font-size: 21px;
+  }
+
+  .clients-panel .client-form > input.clients-search {
+    width: 100%;
+  }
+
+  .clients-panel .client-form > div[style*="justify-content: space-between"] {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .clients-panel .client-form .primary-button {
+    width: 100%;
+  }
+}
