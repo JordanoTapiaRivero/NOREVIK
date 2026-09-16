@@ -15,6 +15,13 @@ function App() {
 const [perfil, setPerfil] = useState(null)
   const [seccion, setSeccion] = useState('dashboard')
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
+  const [periodoReporte, setPeriodoReporte] = useState('mes')
+  const [desdeReporte, setDesdeReporte] = useState('')
+  const [hastaReporte, setHastaReporte] = useState('')
+  const [ahoraChile, setAhoraChile] = useState(() => new Date())
+  const [metricaGraficoReporte, setMetricaGraficoReporte] = useState('ventas')
+  const [selectorMetricaAbierto, setSelectorMetricaAbierto] = useState(false)
+  const [metodoPagoFiltroReporte, setMetodoPagoFiltroReporte] = useState(null)
 
   // DATOS DEL REGISTRO / LOGIN
   const [nombre, setNombre] = useState('')
@@ -131,6 +138,35 @@ const [perfil, setPerfil] = useState(null)
   const [compraDetalle, setCompraDetalle] = useState(null)
   const [compraPorAnular, setCompraPorAnular] = useState(null)
   const [anulandoCompra, setAnulandoCompra] = useState(false)
+
+  // =========================
+  // SALUDO SEGÚN HORA DE CHILE
+  // =========================
+
+  useEffect(() => {
+    const actualizarHora = () => setAhoraChile(new Date())
+
+    actualizarHora()
+    const intervalo = setInterval(actualizarHora, 60 * 1000)
+
+    return () => clearInterval(intervalo)
+  }, [])
+
+  const obtenerSaludo = () => {
+    const partesHora = new Intl.DateTimeFormat('es-CL', {
+      timeZone: 'America/Santiago',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(ahoraChile)
+
+    const horaChile = Number(
+      partesHora.find((parte) => parte.type === 'hour')?.value ?? 0
+    )
+
+    if (horaChile >= 5 && horaChile < 12) return 'Buenos días'
+    if (horaChile >= 12 && horaChile < 20) return 'Buenas tardes'
+    return 'Buenas noches'
+  }
 
   // =========================
   // COMPROBAR SESIÓN
@@ -538,6 +574,7 @@ const cargarVentas = async (negocioId) => {
         id,
         cantidad,
         precio_unitario,
+        costo_unitario,
         subtotal,
         productos (
           nombre,
@@ -2062,6 +2099,471 @@ if (usuario) {
     0
   )
 
+
+  // =========================
+  // REPORTES
+  // =========================
+  const inicioDelDia = (fecha) => {
+    const copia = new Date(fecha)
+    copia.setHours(0, 0, 0, 0)
+    return copia
+  }
+
+  const finDelDia = (fecha) => {
+    const copia = new Date(fecha)
+    copia.setHours(23, 59, 59, 999)
+    return copia
+  }
+
+  const obtenerRangoReporte = () => {
+    const ahora = new Date()
+    let desde = inicioDelDia(ahora)
+    let hasta = finDelDia(ahora)
+
+    if (periodoReporte === '7dias') {
+      desde = inicioDelDia(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - 6))
+    } else if (periodoReporte === '30dias') {
+      desde = inicioDelDia(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - 29))
+    } else if (periodoReporte === 'mes') {
+      desde = inicioDelDia(new Date(ahora.getFullYear(), ahora.getMonth(), 1))
+    } else if (periodoReporte === 'personalizado') {
+      if (desdeReporte) desde = inicioDelDia(new Date(`${desdeReporte}T00:00:00`))
+      if (hastaReporte) hasta = finDelDia(new Date(`${hastaReporte}T00:00:00`))
+    }
+
+    return { desde, hasta }
+  }
+
+  const rangoReporte = obtenerRangoReporte()
+
+  const ventasReporte = ventas.filter((venta) => {
+    if (venta.estado !== 'completada') return false
+    const fecha = new Date(venta.creado_en)
+    return fecha >= rangoReporte.desde && fecha <= rangoReporte.hasta
+  })
+
+  const comprasReporte = compras.filter((compra) => {
+    if (compra.estado !== 'completada') return false
+    const fecha = new Date(compra.creado_en)
+    return fecha >= rangoReporte.desde && fecha <= rangoReporte.hasta
+  })
+
+  const totalVentasReporte = ventasReporte.reduce(
+    (total, venta) => total + Number(venta.total || 0),
+    0
+  )
+
+  const totalComprasReporte = comprasReporte.reduce(
+    (total, compra) => total + Number(compra.total || 0),
+    0
+  )
+
+  const ticketPromedioReporte =
+    ventasReporte.length > 0 ? totalVentasReporte / ventasReporte.length : 0
+
+  const detallesConCostoReporte = ventasReporte.flatMap((venta) =>
+    (venta.detalle_ventas || []).filter(
+      (detalle) =>
+        detalle.costo_unitario !== null &&
+        detalle.costo_unitario !== undefined
+    )
+  )
+
+  const costoVentasReporte = detallesConCostoReporte.reduce(
+    (total, detalle) =>
+      total + Number(detalle.cantidad || 0) * Number(detalle.costo_unitario || 0),
+    0
+  )
+
+  const ventasConCostoReporte = detallesConCostoReporte.reduce(
+    (total, detalle) => total + Number(detalle.subtotal || 0),
+    0
+  )
+
+  const margenBrutoReporte = ventasConCostoReporte - costoVentasReporte
+
+  const totalDetallesReporte = ventasReporte.reduce(
+    (total, venta) => total + (venta.detalle_ventas || []).length,
+    0
+  )
+
+  const margenCompletoReporte =
+    totalDetallesReporte > 0 &&
+    detallesConCostoReporte.length === totalDetallesReporte
+
+  const porcentajeMargenReporte =
+    ventasConCostoReporte > 0
+      ? (margenBrutoReporte / ventasConCostoReporte) * 100
+      : 0
+
+  const metodosReporte = ['efectivo', 'debito', 'credito', 'transferencia', 'otro'].map((metodo) => {
+    const total = ventasReporte
+      .filter((venta) => venta.metodo_pago === metodo)
+      .reduce((acumulado, venta) => acumulado + Number(venta.total || 0), 0)
+
+    return {
+      metodo,
+      total,
+      porcentaje: totalVentasReporte > 0 ? (total / totalVentasReporte) * 100 : 0,
+    }
+  })
+
+  const productosReporteMapa = {}
+
+  ventasReporte.forEach((venta) => {
+    ;(venta.detalle_ventas || []).forEach((detalle) => {
+      const nombreProducto = detalle.productos?.nombre || 'Producto'
+      const skuProducto = detalle.productos?.sku || ''
+      const clave = `${nombreProducto}-${skuProducto}`
+      const cantidad = Number(detalle.cantidad || 0)
+      const subtotal = Number(detalle.subtotal || 0)
+
+      if (!productosReporteMapa[clave]) {
+        productosReporteMapa[clave] = {
+          nombre: nombreProducto,
+          sku: skuProducto,
+          unidades: 0,
+          ventas: 0,
+        }
+      }
+
+      productosReporteMapa[clave].unidades += cantidad
+      productosReporteMapa[clave].ventas += subtotal
+    })
+  })
+
+  const productosMasVendidosReporte = Object.values(productosReporteMapa)
+    .sort((a, b) => b.unidades - a.unidades)
+    .slice(0, 5)
+
+  const ventasFiltradasGraficoReporte = metodoPagoFiltroReporte
+    ? ventasReporte.filter(
+        (venta) => venta.metodo_pago === metodoPagoFiltroReporte
+      )
+    : ventasReporte
+
+  const datosPorDiaReporte = {}
+
+  ventasFiltradasGraficoReporte.forEach((venta) => {
+    const clave = new Date(venta.creado_en).toLocaleDateString('es-CL', {
+      day: '2-digit',
+      month: '2-digit',
+    })
+
+    if (!datosPorDiaReporte[clave]) {
+      datosPorDiaReporte[clave] = {
+        ventas: 0,
+        cantidad: 0,
+        margen: 0,
+      }
+    }
+
+    datosPorDiaReporte[clave].ventas += Number(venta.total || 0)
+    datosPorDiaReporte[clave].cantidad += 1
+
+    ;(venta.detalle_ventas || []).forEach((detalle) => {
+      if (
+        detalle.costo_unitario !== null &&
+        detalle.costo_unitario !== undefined
+      ) {
+        datosPorDiaReporte[clave].margen +=
+          Number(detalle.subtotal || 0) -
+          Number(detalle.cantidad || 0) * Number(detalle.costo_unitario || 0)
+      }
+    })
+  })
+
+  const ventasPorDiaReporte = Object.entries(datosPorDiaReporte)
+    .map(([fecha, datos]) => ({
+      fecha,
+      total:
+        metricaGraficoReporte === 'cantidad'
+          ? datos.cantidad
+          : metricaGraficoReporte === 'margen'
+            ? datos.margen
+            : datos.ventas,
+    }))
+    .slice(-12)
+
+  const maxVentaDiaReporte = Math.max(
+    ...ventasPorDiaReporte.map((item) => Math.max(Number(item.total || 0), 0)),
+    1
+  )
+
+  const etiquetaMetricaGrafico =
+    metricaGraficoReporte === 'cantidad'
+      ? 'N.º de ventas'
+      : metricaGraficoReporte === 'margen'
+        ? 'Margen bruto'
+        : 'Ventas'
+
+  const formatearValorGraficoReporte = (valor) => {
+    if (metricaGraficoReporte === 'cantidad') {
+      return Number(valor || 0).toLocaleString('es-CL')
+    }
+
+    return `$${Math.round(Number(valor || 0)).toLocaleString('es-CL')}`
+  }
+
+  const nombreMetodoPagoReporte = (metodo) => {
+    const nombres = {
+      efectivo: 'Efectivo',
+      debito: 'Débito',
+      credito: 'Crédito',
+      transferencia: 'Transferencia',
+      otro: 'Otro',
+    }
+
+    return nombres[metodo] || metodo
+  }
+
+  const colorMetodoPagoReporte = (metodo) => {
+    const colores = {
+      efectivo: {
+        principal: '#22c55e',
+        suave: '#a9ebc4',
+      },
+      debito: {
+        principal: '#2563eb',
+        suave: '#a9c7ff',
+      },
+      credito: {
+        principal: '#f59e0b',
+        suave: '#fbd38d',
+      },
+      transferencia: {
+        principal: '#6d4aff',
+        suave: '#c4b5fd',
+      },
+      otro: {
+        principal: '#94a3b8',
+        suave: '#d7dee8',
+      },
+    }
+
+    return colores[metodo] || {
+      principal: '#27b969',
+      suave: '#a9ebc4',
+    }
+  }
+
+  const colorGraficoReporte = metodoPagoFiltroReporte
+    ? colorMetodoPagoReporte(metodoPagoFiltroReporte)
+    : {
+        principal: '#27b969',
+        suave: '#a9ebc4',
+      }
+
+  const fechaActualNorevik = new Intl.DateTimeFormat('es-CL', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date())
+
+  const exportarReporteExcel = () => {
+    if (ventasReporte.length === 0 && comprasReporte.length === 0) {
+      window.alert('No hay datos en el período seleccionado para exportar.')
+      return
+    }
+
+    const formatearFechaExcel = (fecha) => {
+      if (!fecha) return ''
+      return new Intl.DateTimeFormat('es-CL', {
+        timeZone: 'America/Santiago',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(fecha))
+    }
+
+    const etiquetaPeriodo = {
+      hoy: 'Hoy',
+      '7dias': 'Últimos 7 días',
+      '30dias': 'Últimos 30 días',
+      mes: 'Este mes',
+      personalizado: 'Personalizado',
+    }[periodoReporte] || 'Período seleccionado'
+
+    const desdeTexto = rangoReporte.desde.toLocaleDateString('es-CL')
+    const hastaTexto = rangoReporte.hasta.toLocaleDateString('es-CL')
+
+    const resumen = [
+      { Indicador: 'Negocio', Valor: negocio || '' },
+      { Indicador: 'Período', Valor: etiquetaPeriodo },
+      { Indicador: 'Desde', Valor: desdeTexto },
+      { Indicador: 'Hasta', Valor: hastaTexto },
+      { Indicador: 'Ventas totales', Valor: totalVentasReporte },
+      { Indicador: 'Cantidad de ventas', Valor: ventasReporte.length },
+      {
+        Indicador: 'Margen bruto',
+        Valor: detallesConCostoReporte.length > 0 ? margenBrutoReporte : 'Sin datos históricos',
+      },
+      {
+        Indicador: 'Margen bruto %',
+        Valor: detallesConCostoReporte.length > 0 ? porcentajeMargenReporte / 100 : '',
+      },
+      {
+        Indicador: 'Cobertura del margen',
+        Valor: margenCompletoReporte
+          ? 'Completa'
+          : detallesConCostoReporte.length > 0
+            ? 'Parcial: existen ventas sin costo histórico'
+            : 'Sin ventas con costo histórico',
+      },
+      { Indicador: 'Compras totales', Valor: totalComprasReporte },
+      { Indicador: 'Cantidad de compras', Valor: comprasReporte.length },
+      { Indicador: 'Ticket promedio', Valor: ticketPromedioReporte },
+    ]
+
+    const datosVentas = ventasReporte.map((venta) => {
+      const detalles = venta.detalle_ventas || []
+      const detallesConCosto = detalles.filter(
+        (detalle) =>
+          detalle.costo_unitario !== null &&
+          detalle.costo_unitario !== undefined
+      )
+
+      const costoVenta = detallesConCosto.reduce(
+        (total, detalle) =>
+          total + Number(detalle.cantidad || 0) * Number(detalle.costo_unitario || 0),
+        0
+      )
+
+      const subtotalConCosto = detallesConCosto.reduce(
+        (total, detalle) => total + Number(detalle.subtotal || 0),
+        0
+      )
+
+      return {
+        Fecha: formatearFechaExcel(venta.creado_en),
+        'ID venta': venta.id,
+        Cliente: venta.clientes?.nombre || 'Venta sin cliente',
+        RUT: venta.clientes?.rut || '',
+        'Método de pago': venta.metodo_pago || '',
+        Estado: venta.estado || '',
+        Productos: detalles
+          .map((detalle) => `${detalle.productos?.nombre || 'Producto'} x${detalle.cantidad}`)
+          .join(' | '),
+        'Venta total': Number(venta.total || 0),
+        'Costo histórico': detallesConCosto.length > 0 ? costoVenta : '',
+        'Margen bruto': detallesConCosto.length > 0 ? subtotalConCosto - costoVenta : '',
+        'Costo histórico completo':
+          detalles.length > 0 && detallesConCosto.length === detalles.length ? 'Sí' : 'No',
+      }
+    })
+
+    const datosCompras = comprasReporte.map((compra) => ({
+      Fecha: formatearFechaExcel(compra.creado_en),
+      'ID compra': compra.id,
+      Proveedor: compra.proveedores?.nombre || '',
+      'RUT proveedor': compra.proveedores?.rut || '',
+      Documento: compra.numero_documento || '',
+      'Método de pago': compra.metodo_pago || '',
+      Estado: compra.estado || '',
+      Productos: (compra.detalle_compras || [])
+        .map((detalle) => `${detalle.productos?.nombre || 'Producto'} x${detalle.cantidad}`)
+        .join(' | '),
+      Total: Number(compra.total || 0),
+    }))
+
+    const datosMetodosPago = metodosReporte.map((item) => ({
+      'Método de pago':
+        item.metodo.charAt(0).toUpperCase() + item.metodo.slice(1),
+      Total: Number(item.total || 0),
+      Porcentaje: Number(item.porcentaje || 0) / 100,
+    }))
+
+    const datosProductos = Object.values(productosReporteMapa)
+      .sort((a, b) => b.unidades - a.unidades)
+      .map((producto) => ({
+        Producto: producto.nombre,
+        SKU: producto.sku || '',
+        'Unidades vendidas': Number(producto.unidades || 0),
+        'Total vendido': Number(producto.ventas || 0),
+      }))
+
+    const libro = XLSX.utils.book_new()
+
+    const hojaResumen = XLSX.utils.json_to_sheet(resumen)
+    const hojaVentas = XLSX.utils.json_to_sheet(datosVentas)
+    const hojaCompras = XLSX.utils.json_to_sheet(datosCompras)
+    const hojaMetodos = XLSX.utils.json_to_sheet(datosMetodosPago)
+    const hojaProductos = XLSX.utils.json_to_sheet(datosProductos)
+
+    hojaResumen['!cols'] = [{ wch: 30 }, { wch: 34 }]
+    hojaVentas['!cols'] = [
+      { wch: 20 }, { wch: 38 }, { wch: 28 }, { wch: 16 }, { wch: 18 },
+      { wch: 14 }, { wch: 50 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 24 },
+    ]
+    hojaCompras['!cols'] = [
+      { wch: 20 }, { wch: 38 }, { wch: 28 }, { wch: 18 }, { wch: 18 },
+      { wch: 18 }, { wch: 14 }, { wch: 50 }, { wch: 16 },
+    ]
+    hojaMetodos['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 16 }]
+    hojaProductos['!cols'] = [{ wch: 32 }, { wch: 18 }, { wch: 20 }, { wch: 18 }]
+
+    const aplicarFormatoMoneda = (hoja, columnas, cantidadFilas) => {
+      columnas.forEach((columna) => {
+        for (let fila = 2; fila <= cantidadFilas + 1; fila += 1) {
+          const celda = hoja[`${columna}${fila}`]
+          if (celda && typeof celda.v === 'number') {
+            celda.z = '$#,##0'
+          }
+        }
+      })
+    }
+
+    aplicarFormatoMoneda(hojaVentas, ['H', 'I', 'J'], datosVentas.length)
+    aplicarFormatoMoneda(hojaCompras, ['I'], datosCompras.length)
+    aplicarFormatoMoneda(hojaMetodos, ['B'], datosMetodosPago.length)
+    aplicarFormatoMoneda(hojaProductos, ['D'], datosProductos.length)
+
+    for (let fila = 2; fila <= datosMetodosPago.length + 1; fila += 1) {
+      const celda = hojaMetodos[`C${fila}`]
+      if (celda && typeof celda.v === 'number') celda.z = '0.0%'
+    }
+
+    const filaMargenPorcentaje = resumen.findIndex(
+      (item) => item.Indicador === 'Margen bruto %'
+    ) + 2
+    if (
+      filaMargenPorcentaje >= 2 &&
+      hojaResumen[`B${filaMargenPorcentaje}`] &&
+      typeof hojaResumen[`B${filaMargenPorcentaje}`].v === 'number'
+    ) {
+      hojaResumen[`B${filaMargenPorcentaje}`].z = '0.0%'
+    }
+
+    ;['Ventas totales', 'Margen bruto', 'Compras totales', 'Ticket promedio'].forEach(
+      (indicador) => {
+        const fila = resumen.findIndex((item) => item.Indicador === indicador) + 2
+        const celda = hojaResumen[`B${fila}`]
+        if (celda && typeof celda.v === 'number') celda.z = '$#,##0'
+      }
+    )
+
+    XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen')
+    XLSX.utils.book_append_sheet(libro, hojaVentas, 'Ventas')
+    XLSX.utils.book_append_sheet(libro, hojaCompras, 'Compras')
+    XLSX.utils.book_append_sheet(libro, hojaMetodos, 'Métodos de pago')
+    XLSX.utils.book_append_sheet(libro, hojaProductos, 'Productos')
+
+    const fechaArchivo = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Santiago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+
+    XLSX.writeFile(
+      libro,
+      `NOREVIK_Reporte_${fechaArchivo}_${periodoReporte}.xlsx`
+    )
+  }
+
   const clientesFiltrados = clientes.filter((cliente) => {
     const termino = busquedaCliente.trim().toLowerCase()
 
@@ -2262,90 +2764,36 @@ if (usuario) {
         </div>
 
         <nav className="sidebar-menu">
-
-          <button
-            className={`menu-item ${
-              seccion === 'dashboard' ? 'active' : ''
-            }`}
-            onClick={() => setSeccion('dashboard')}
-          >
-            <span>🏠</span>
-            Panel de control
+          <button className={`menu-item ${seccion === 'dashboard' ? 'active' : ''}`} onClick={() => setSeccion('dashboard')}>
+            <span className="menu-icon">🏠</span> Inicio
           </button>
-
-          <button
-            className={`menu-item ${seccion === 'ventas' ? 'active' : ''}`}
-            onClick={() => setSeccion('ventas')}
-          >
-            <span>🧾</span>
-            Ventas
+          <button className={`menu-item ${seccion === 'ventas' ? 'active' : ''}`} onClick={() => setSeccion('ventas')}>
+            <span className="menu-icon">🧾</span> Ventas
           </button>
-
-          <button
-            className={`menu-item ${
-              seccion === 'productos' ? 'active' : ''
-            }`}
-            onClick={() => setSeccion('productos')}
-          >
-            <span>📦</span>
-            Productos
+          <button className={`menu-item ${seccion === 'compras' ? 'active' : ''}`} onClick={() => setSeccion('compras')}>
+            <span className="menu-icon">🛒</span> Compras
           </button>
-
-          <button
-            className={`menu-item ${
-              seccion === 'inventario' ? 'active' : ''
-            }`}
-            onClick={() => setSeccion('inventario')}
-          >
-            <span>📋</span>
-            Inventario
+          <button className={`menu-item ${seccion === 'productos' ? 'active' : ''}`} onClick={() => setSeccion('productos')}>
+            <span className="menu-icon">📦</span> Productos
           </button>
-
-          <button
-            className={`menu-item ${seccion === 'caja' ? 'active' : ''}`}
-            onClick={() => setSeccion('caja')}
-          >
-            <span>💰</span>
-            Caja
+          <button className={`menu-item ${seccion === 'inventario' ? 'active' : ''}`} onClick={() => setSeccion('inventario')}>
+            <span className="menu-icon">📋</span> Inventario
           </button>
-
-          <button
-            className={`menu-item ${seccion === 'clientes' ? 'active' : ''}`}
-            onClick={() => setSeccion('clientes')}
-          >
-            <span>👤</span>
-            Clientes
+          <button className={`menu-item ${seccion === 'proveedores' ? 'active' : ''}`} onClick={() => setSeccion('proveedores')}>
+            <span className="menu-icon">🚚</span> Proveedores
           </button>
-
-          <button
-            className={`menu-item ${seccion === 'proveedores' ? 'active' : ''}`}
-            onClick={() => setSeccion('proveedores')}
-          >
-            <span>🚚</span>
-            Proveedores
+          <button className={`menu-item ${seccion === 'clientes' ? 'active' : ''}`} onClick={() => setSeccion('clientes')}>
+            <span className="menu-icon">👤</span> Clientes
           </button>
-          <button
-            className={`menu-item ${seccion === 'compras' ? 'active' : ''}`}
-            onClick={() => setSeccion('compras')}
-          >
-            <span>🛒</span>
-            Compras
+          <button className={`menu-item ${seccion === 'caja' ? 'active' : ''}`} onClick={() => setSeccion('caja')}>
+            <span className="menu-icon">💰</span> Caja
           </button>
-
+          <button className={`menu-item ${seccion === 'reportes' ? 'active' : ''}`} onClick={() => setSeccion('reportes')}>
+            <span className="menu-icon">📊</span> Reportes
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
-
-          <div className="sidebar-user">
-            <div className="user-avatar">
-              {nombreUsuario.charAt(0).toUpperCase()}
-            </div>
-
-            <div>
-              <strong>{nombreUsuario}</strong>
-              <span>{usuario.email}</span>
-            </div>
-          </div>
 
           <button
             type="button"
@@ -2355,13 +2803,21 @@ if (usuario) {
           >
             {cerrandoSesion ? 'Cerrando...' : 'Cerrar sesión'}
           </button>
-
         </div>
 
       </aside>
 
       {/* CONTENIDO */}
       <main className="dashboard-main">
+
+        <div className="desktop-app-topbar">
+          <span className="desktop-app-date">{fechaActualNorevik}</span>
+
+          <div className="desktop-business-top">
+            <span>NEGOCIO</span>
+            <strong>{negocio}</strong>
+          </div>
+        </div>
 
         {seccion === 'dashboard' && (
           <>
@@ -2373,17 +2829,12 @@ if (usuario) {
                   PANEL DE CONTROL
                 </span>
 
-                <h1>Buenos días, {nombreUsuario}</h1>
+                <h1>{obtenerSaludo()}, {nombreUsuario}</h1>
 
                 <p>
                   Aquí tienes un resumen de lo que está
                   pasando en {negocio}.
                 </p>
-              </div>
-
-              <div className="business-name">
-                <span>Negocio</span>
-                <strong>{negocio}</strong>
               </div>
 
             </header>
@@ -4552,6 +5003,348 @@ if (usuario) {
           </>
         )}
 
+
+        {seccion === 'reportes' && (
+          <section className="reports-page">
+            <div className="reports-title-row">
+              <div className="reports-title">
+                <div className="reports-title-icon">📊</div>
+                <div>
+                  <h1>Reportes</h1>
+                  <p>Analiza el rendimiento de tu negocio</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="reports-export-button"
+                onClick={exportarReporteExcel}
+              >
+                ↓ <span>Exportar reporte</span>⌄
+              </button>
+            </div>
+
+            <div className="reports-filter-card">
+              <div className="reports-period">
+                <strong>Período</strong>
+                <div className="reports-period-buttons">
+                  <button className={periodoReporte === 'hoy' ? 'active' : ''} onClick={() => setPeriodoReporte('hoy')}>Hoy</button>
+                  <button className={periodoReporte === '7dias' ? 'active' : ''} onClick={() => setPeriodoReporte('7dias')}>7 días</button>
+                  <button className={periodoReporte === '30dias' ? 'active' : ''} onClick={() => setPeriodoReporte('30dias')}>30 días</button>
+                  <button className={periodoReporte === 'mes' ? 'active' : ''} onClick={() => setPeriodoReporte('mes')}>Este mes</button>
+                  <button className={periodoReporte === 'personalizado' ? 'active' : ''} onClick={() => setPeriodoReporte('personalizado')}>Personalizado</button>
+                </div>
+              </div>
+
+              <label>
+                <span>Desde</span>
+                <input type="date" value={desdeReporte} onChange={(e) => { setDesdeReporte(e.target.value); setPeriodoReporte('personalizado') }} />
+              </label>
+
+              <label>
+                <span>Hasta</span>
+                <input type="date" value={hastaReporte} onChange={(e) => { setHastaReporte(e.target.value); setPeriodoReporte('personalizado') }} />
+              </label>
+            </div>
+
+            <div className="reports-kpis">
+              <article className="report-kpi">
+                <div className="report-kpi-icon green">$</div>
+                <div>
+                  <span>Ventas totales</span>
+                  <strong>${Math.round(totalVentasReporte).toLocaleString('es-CL')}</strong>
+                  <small>{ventasReporte.length} {ventasReporte.length === 1 ? 'venta' : 'ventas'}</small>
+                </div>
+              </article>
+
+              <article className="report-kpi">
+                <div className="report-kpi-icon blue">▥</div>
+                <div>
+                  <span>Margen bruto</span>
+                  <strong>
+                    {detallesConCostoReporte.length > 0
+                      ? `$${Math.round(margenBrutoReporte).toLocaleString('es-CL')}`
+                      : 'Sin datos'}
+                  </strong>
+                  <small>
+                    {detallesConCostoReporte.length === 0
+                      ? 'Aún no hay ventas con costo histórico'
+                      : margenCompletoReporte
+                        ? `${porcentajeMargenReporte.toFixed(1).replace('.', ',')}% sobre ventas`
+                        : `${porcentajeMargenReporte.toFixed(1).replace('.', ',')}% · Solo ventas con costo histórico`}
+                  </small>
+                </div>
+              </article>
+
+              <article className="report-kpi">
+                <div className="report-kpi-icon red">⌁</div>
+                <div>
+                  <span>Compras</span>
+                  <strong>${Math.round(totalComprasReporte).toLocaleString('es-CL')}</strong>
+                  <small>{comprasReporte.length} {comprasReporte.length === 1 ? 'compra' : 'compras'}</small>
+                </div>
+              </article>
+
+              <article className="report-kpi">
+                <div className="report-kpi-icon purple">♧</div>
+                <div>
+                  <span>Ticket promedio</span>
+                  <strong>${Math.round(ticketPromedioReporte).toLocaleString('es-CL')}</strong>
+                  <small>Promedio por venta</small>
+                </div>
+              </article>
+            </div>
+
+            <div className="reports-grid-main">
+              <article className="report-card report-sales-chart">
+                <div className="report-card-heading">
+                  <div>
+                    <h2>
+                      Evolución de ventas
+                      {metodoPagoFiltroReporte
+                        ? ` · ${nombreMetodoPagoReporte(metodoPagoFiltroReporte)}`
+                        : ''}
+                    </h2>
+                    <p>
+                      {metodoPagoFiltroReporte
+                        ? `Mostrando solo operaciones con ${nombreMetodoPagoReporte(metodoPagoFiltroReporte)}.`
+                        : 'Total de ventas por día en el período seleccionado.'}
+                    </p>
+                  </div>
+                  <div className="report-metric-selector">
+                    <button
+                      type="button"
+                      onClick={() => setSelectorMetricaAbierto((abierto) => !abierto)}
+                    >
+                      {etiquetaMetricaGrafico}⌄
+                    </button>
+
+                    {selectorMetricaAbierto && (
+                      <div className="report-metric-menu">
+                        <button
+                          type="button"
+                          className={metricaGraficoReporte === 'ventas' ? 'active' : ''}
+                          onClick={() => {
+                            setMetricaGraficoReporte('ventas')
+                            setSelectorMetricaAbierto(false)
+                          }}
+                        >
+                          Ventas ($)
+                        </button>
+                        <button
+                          type="button"
+                          className={metricaGraficoReporte === 'cantidad' ? 'active' : ''}
+                          onClick={() => {
+                            setMetricaGraficoReporte('cantidad')
+                            setSelectorMetricaAbierto(false)
+                          }}
+                        >
+                          N.º de ventas
+                        </button>
+                        <button
+                          type="button"
+                          className={metricaGraficoReporte === 'margen' ? 'active' : ''}
+                          onClick={() => {
+                            setMetricaGraficoReporte('margen')
+                            setSelectorMetricaAbierto(false)
+                          }}
+                        >
+                          Margen bruto
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {ventasPorDiaReporte.length > 0 ? (
+                  <div className="sales-bars">
+                    {ventasPorDiaReporte.map((item) => (
+                      <div className="sales-bar-column" key={item.fecha}>
+                        <div className="sales-bar-value">{formatearValorGraficoReporte(item.total)}</div>
+                        <div className="sales-bar-track">
+                          <div
+                            className="sales-bar-fill"
+                            style={{
+                              height: `${Math.max((item.total / maxVentaDiaReporte) * 100, 8)}%`,
+                              background: `linear-gradient(180deg, ${colorGraficoReporte.principal}, ${colorGraficoReporte.suave})`,
+                            }}
+                          ></div>
+                        </div>
+                        <span>{item.fecha}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="report-empty">Aún no hay ventas en este período.</div>
+                )}
+              </article>
+
+              <article className="report-card">
+                <div className="report-card-heading">
+                  <div>
+                    <h2>Ventas por método de pago</h2>
+                    <p>
+                      {metodoPagoFiltroReporte
+                        ? `Filtro activo: ${nombreMetodoPagoReporte(metodoPagoFiltroReporte)}`
+                        : 'Distribución de ventas según método de pago.'}
+                    </p>
+                  </div>
+
+                  {metodoPagoFiltroReporte && (
+                    <button
+                      type="button"
+                      className="report-clear-payment-filter"
+                      onClick={() => setMetodoPagoFiltroReporte(null)}
+                    >
+                      Ver todas
+                    </button>
+                  )}
+                </div>
+
+                <div className="payment-report">
+                  <div className="payment-donut" style={{
+                    background: totalVentasReporte > 0
+                      ? `conic-gradient(
+                          #22c55e 0 ${metodosReporte[0].porcentaje}%,
+                          #2563eb ${metodosReporte[0].porcentaje}% ${metodosReporte[0].porcentaje + metodosReporte[1].porcentaje}%,
+                          #f59e0b ${metodosReporte[0].porcentaje + metodosReporte[1].porcentaje}% ${metodosReporte[0].porcentaje + metodosReporte[1].porcentaje + metodosReporte[2].porcentaje}%,
+                          #6d4aff ${metodosReporte[0].porcentaje + metodosReporte[1].porcentaje + metodosReporte[2].porcentaje}% ${metodosReporte[0].porcentaje + metodosReporte[1].porcentaje + metodosReporte[2].porcentaje + metodosReporte[3].porcentaje}%,
+                          #94a3b8 ${metodosReporte[0].porcentaje + metodosReporte[1].porcentaje + metodosReporte[2].porcentaje + metodosReporte[3].porcentaje}% 100%
+                        )`
+                      : '#e8edf4'
+                  }}>
+                    <div><strong>${Math.round(totalVentasReporte).toLocaleString('es-CL')}</strong><span>Total</span></div>
+                  </div>
+
+                  <div className="payment-legend">
+                    {metodosReporte.map((item, index) => (
+                      <button
+                        key={item.metodo}
+                        type="button"
+                        className={`payment-legend-button ${
+                          metodoPagoFiltroReporte === item.metodo ? 'selected' : ''
+                        }`}
+                        style={
+                          metodoPagoFiltroReporte === item.metodo
+                            ? {
+                                '--payment-selected-color':
+                                  colorMetodoPagoReporte(item.metodo).principal,
+                                '--payment-selected-soft':
+                                  `${colorMetodoPagoReporte(item.metodo).principal}14`,
+                              }
+                            : undefined
+                        }
+                        onClick={() =>
+                          setMetodoPagoFiltroReporte((actual) =>
+                            actual === item.metodo ? null : item.metodo
+                          )
+                        }
+                        disabled={item.total <= 0}
+                        title={
+                          item.total > 0
+                            ? `Ver ventas con ${nombreMetodoPagoReporte(item.metodo)}`
+                            : `No hay ventas con ${nombreMetodoPagoReporte(item.metodo)}`
+                        }
+                      >
+                        <span className={`payment-dot dot-${index}`}></span>
+                        <strong>{nombreMetodoPagoReporte(item.metodo)}</strong>
+                        <b>${Math.round(item.total).toLocaleString('es-CL')}</b>
+                        <small>{Math.round(item.porcentaje)}%</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div className="reports-grid-secondary">
+              <article className="report-card">
+                <div className="report-card-heading">
+                  <div>
+                    <h2>Productos más vendidos</h2>
+                    <p>Top 5 productos por cantidad de unidades vendidas.</p>
+                  </div>
+                  <button onClick={() => setSeccion('ventas')}>Ver todos</button>
+                </div>
+
+                <div className="report-table-wrap">
+                  <table className="report-table">
+                    <thead><tr><th>#</th><th>Producto</th><th>Unidades</th><th>Ventas</th></tr></thead>
+                    <tbody>
+                      {productosMasVendidosReporte.length > 0 ? productosMasVendidosReporte.map((producto, index) => (
+                        <tr key={`${producto.nombre}-${index}`}>
+                          <td>{index + 1}</td>
+                          <td><strong>{producto.nombre}</strong><small>{producto.sku || 'Sin SKU'}</small></td>
+                          <td>{producto.unidades}</td>
+                          <td><strong>${Math.round(producto.ventas).toLocaleString('es-CL')}</strong></td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan="4" className="report-table-empty">Sin ventas para mostrar.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article className="report-card report-summary-card">
+                <div className="report-card-heading">
+                  <div>
+                    <h2>Resumen del período</h2>
+                    <p>Principales indicadores financieros.</p>
+                  </div>
+                </div>
+                <div className="report-summary-list">
+                  <div><span>Ventas</span><strong>${Math.round(totalVentasReporte).toLocaleString('es-CL')}</strong></div>
+                  <div><span>Nº de ventas</span><strong>{ventasReporte.length}</strong></div>
+                  <div><span>Compras</span><strong>${Math.round(totalComprasReporte).toLocaleString('es-CL')}</strong></div>
+                  <div><span>Nº de compras</span><strong>{comprasReporte.length}</strong></div>
+                  <div className="highlight"><span>Ticket promedio</span><strong>${Math.round(ticketPromedioReporte).toLocaleString('es-CL')}</strong></div>
+                  <div>
+                    <span>Margen bruto</span>
+                    <strong>
+                      {detallesConCostoReporte.length > 0
+                        ? `$${Math.round(margenBrutoReporte).toLocaleString('es-CL')}`
+                        : 'Sin datos'}
+                    </strong>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <article className="report-card reports-last-sales">
+              <div className="report-card-heading">
+                <div>
+                  <h2>Últimas ventas del período</h2>
+                  <p>Detalle de las ventas más recientes.</p>
+                </div>
+                <button onClick={() => setSeccion('ventas')}>Ver todas</button>
+              </div>
+
+              <div className="report-table-wrap">
+                <table className="report-table">
+                  <thead>
+                    <tr><th>Fecha</th><th>Cliente</th><th>Método de pago</th><th>Productos</th><th>Total</th></tr>
+                  </thead>
+                  <tbody>
+                    {ventasReporte.slice(0, 5).map((venta) => (
+                      <tr key={venta.id}>
+                        <td>{formatearFechaVenta(venta.creado_en)}</td>
+                        <td>{venta.clientes?.nombre || 'Cliente general'}</td>
+                        <td><span className={`report-payment-badge ${venta.metodo_pago}`}>{venta.metodo_pago}</span></td>
+                        <td>{(venta.detalle_ventas || []).reduce((suma, item) => suma + Number(item.cantidad || 0), 0)}</td>
+                        <td><strong>${Number(venta.total || 0).toLocaleString('es-CL')}</strong></td>
+                      </tr>
+                    ))}
+                    {ventasReporte.length === 0 && (
+                      <tr><td colSpan="5" className="report-table-empty">No hay ventas en este período.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+          </section>
+        )}
 
         {seccion === 'compras' && (
           <section className="clients-section">
