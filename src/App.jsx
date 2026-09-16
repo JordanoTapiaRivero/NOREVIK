@@ -14,6 +14,7 @@ function App() {
   const [confirmarCerrarSesion, setConfirmarCerrarSesion] = useState(false)
 const [perfil, setPerfil] = useState(null)
   const [seccion, setSeccion] = useState('dashboard')
+  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
 
   // DATOS DEL REGISTRO / LOGIN
   const [nombre, setNombre] = useState('')
@@ -178,6 +179,10 @@ const [perfil, setPerfil] = useState(null)
     subscription.unsubscribe()
   }
 }, [])
+
+  useEffect(() => {
+    setMenuMovilAbierto(false)
+  }, [seccion])
 
   // =========================
 // OBTENER PERFIL
@@ -2208,8 +2213,38 @@ if (usuario) {
           </div>
         )}
 
-{/* SIDEBAR */}
-      <aside className="sidebar">
+{/* MENÚ MÓVIL */}
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="mobile-menu-button"
+          onClick={() => setMenuMovilAbierto((actual) => !actual)}
+          aria-label={menuMovilAbierto ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={menuMovilAbierto}
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+
+        <div className="mobile-brand">
+          <div className="mobile-brand-logo">N</div>
+          <div>
+            <strong>NOREVIK</strong>
+            <span>Gestión de negocio</span>
+          </div>
+        </div>
+      </header>
+
+      <button
+        type="button"
+        className={`mobile-sidebar-overlay ${menuMovilAbierto ? 'visible' : ''}`}
+        onClick={() => setMenuMovilAbierto(false)}
+        aria-label="Cerrar menú"
+      />
+
+      {/* SIDEBAR */}
+      <aside className={`sidebar ${menuMovilAbierto ? 'mobile-open' : ''}`}>
 
         <div className="sidebar-brand">
           <div className="sidebar-logo">N</div>
