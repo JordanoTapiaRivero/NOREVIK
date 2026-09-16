@@ -1714,6 +1714,9 @@ const formatearFechaVenta = (fecha) => {
       cargarProductos(perfil.negocio_id),
       cargarMovimientosInventario(perfil.negocio_id),
       cargarCompras(perfil.negocio_id),
+      cargarCajaActual(perfil.negocio_id),
+      cargarResumenCaja(),
+      cargarMovimientosCaja(),
     ])
 
     setCarritoCompra([])
@@ -1766,10 +1769,13 @@ const formatearFechaVenta = (fecha) => {
     }
 
     await Promise.all([
-      cargarProductos(perfil.negocio_id),
-      cargarMovimientosInventario(perfil.negocio_id),
-      cargarCompras(perfil.negocio_id),
-    ])
+  cargarProductos(perfil.negocio_id),
+  cargarMovimientosInventario(perfil.negocio_id),
+  cargarCompras(perfil.negocio_id),
+  cargarCajaActual(perfil.negocio_id),
+  cargarResumenCaja(),
+  cargarMovimientosCaja(),
+])
 
     setCompraDetalle(null)
     setCompraPorAnular(null)
