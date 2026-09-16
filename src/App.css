@@ -3319,3 +3319,324 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 }
+/* ========================================
+   BOTÓN NUEVO CLIENTE
+======================================== */
+
+.clients-heading > button {
+  background: #111827;
+  color: #ffffff;
+  border: 1px solid #111827;
+}
+
+.clients-heading > button:hover {
+  background: #242d3d;
+  color: #ffffff;
+  border-color: #242d3d;
+}
+/* ========================================
+   NOREVIK - ACCIONES PRODUCTOS
+======================================== */
+
+.product-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* EXPORTAR EXCEL */
+.product-heading-actions .export-excel-button {
+  min-height: 40px;
+  padding: 0 17px;
+
+  border: 1px solid #15803d !important;
+  border-radius: 8px;
+
+  background: #16a34a !important;
+  color: #ffffff !important;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  box-shadow: 0 2px 5px rgba(22, 163, 74, 0.2);
+
+  transition: all 0.2s ease;
+}
+
+.product-heading-actions .export-excel-button:hover {
+  background: #15803d !important;
+  border-color: #15803d !important;
+  color: #ffffff !important;
+
+  transform: translateY(-1px);
+}
+
+
+/* AGREGAR PRODUCTO */
+.product-heading-actions button:last-child {
+  min-height: 40px;
+  padding: 0 17px;
+
+  border: 1px solid #111827 !important;
+  border-radius: 8px;
+
+  background: #111827 !important;
+  color: #ffffff !important;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  box-shadow: 0 2px 5px rgba(17, 24, 39, 0.2);
+
+  transition: all 0.2s ease;
+}
+
+.product-heading-actions button:last-child:hover {
+  background: #263244 !important;
+  border-color: #263244 !important;
+  color: #ffffff !important;
+
+  transform: translateY(-1px);
+}
+
+/* ========================================
+   CAJA NOREVIK
+======================================== */
+
+.cash-message {
+  margin-bottom: 18px;
+}
+
+.cash-panel {
+  min-height: auto;
+}
+
+.cash-closed-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.cash-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.cash-status-badge.closed {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+}
+
+.cash-status-badge.open {
+  background: #ecfdf3;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.cash-empty-state {
+  width: 100%;
+  max-width: 520px;
+  margin: 25px auto 10px;
+  text-align: center;
+}
+
+.cash-main-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  background: #111827;
+  font-size: 25px;
+}
+
+.cash-empty-state h2 {
+  margin: 7px 0 9px;
+  color: #111827;
+  font-size: 22px;
+  letter-spacing: -0.4px;
+}
+
+.cash-empty-state > p {
+  max-width: 470px;
+  margin: 0 auto 24px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.cash-open-form {
+  max-width: 360px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.cash-money-input {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  height: 48px;
+  border: 1px solid #d9dce1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.cash-money-input:focus-within {
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+}
+
+.cash-money-input > span {
+  height: 100%;
+  min-width: 45px;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid #e5e7eb;
+  background: #f8f9fa;
+  color: #111827;
+  font-weight: 800;
+}
+
+.cash-money-input input {
+  width: 100%;
+  height: 100%;
+  padding: 0 14px;
+  border: 0 !important;
+  outline: 0;
+  background: transparent;
+  color: #111827;
+  box-shadow: none !important;
+}
+
+.cash-open-button {
+  width: 100%;
+  min-height: 45px;
+  border: 1px solid #111827;
+  border-radius: 9px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  transition: 0.2s ease;
+}
+
+.cash-open-button:hover:not(:disabled) {
+  background: #263244;
+  border-color: #263244;
+  transform: translateY(-1px);
+}
+
+.cash-open-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cash-loading {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cash-stats {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.cash-open-text {
+  color: #15803d !important;
+}
+
+.cash-date-value {
+  display: block;
+  margin-bottom: 5px;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.cash-heading {
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.cash-current-info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cash-current-info > div {
+  padding: 17px;
+  border: 1px solid #e7e9ed;
+  border-radius: 10px;
+  background: #f8f9fa;
+}
+
+.cash-current-info span {
+  display: block;
+  margin-bottom: 6px;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cash-current-info strong {
+  color: #111827;
+  font-size: 15px;
+}
+
+.cash-next-note {
+  margin-top: 16px;
+  padding: 15px 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid #d1fae5;
+  border-radius: 10px;
+  background: #f0fdf4;
+}
+
+.cash-next-note strong {
+  color: #166534;
+  font-size: 12px;
+}
+
+.cash-next-note span {
+  color: #4b5563;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1050px) {
+  .cash-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .cash-stats,
+  .cash-current-info {
+    grid-template-columns: 1fr;
+  }
+
+  .cash-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cash-empty-state {
+    margin-top: 18px;
+  }
+}

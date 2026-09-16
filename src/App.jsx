@@ -58,6 +58,14 @@ const [perfil, setPerfil] = useState(null)
   const [ventaDetalle, setVentaDetalle] = useState(null)
   const [anulandoVenta, setAnulandoVenta] = useState(false)
   const [ventaPorAnular, setVentaPorAnular] = useState(null)
+  const [clienteVentaId, setClienteVentaId] = useState('')
+
+  // CAJA
+  const [cajaActual, setCajaActual] = useState(null)
+  const [montoInicialCaja, setMontoInicialCaja] = useState('')
+  const [cargandoCaja, setCargandoCaja] = useState(false)
+  const [abriendoCaja, setAbriendoCaja] = useState(false)
+  const [mensajeCaja, setMensajeCaja] = useState('')
 
   // CLIENTES
   const [clientes, setClientes] = useState([])
@@ -456,6 +464,14 @@ const cargarVentas = async (negocioId) => {
       metodo_pago,
       estado,
       creado_en,
+      cliente_id,
+      clientes (
+        id,
+        nombre,
+        rut,
+        telefono,
+        correo
+      ),
       detalle_ventas (
         id,
         cantidad,
@@ -561,6 +577,7 @@ const registrarVenta = async () => {
   const { error } = await supabase.rpc('registrar_venta', {
     p_metodo_pago: metodoPago,
     p_productos: productosVenta,
+    p_cliente_id: clienteVentaId || null,
   })
 
   if (error) {
@@ -578,6 +595,7 @@ const registrarVenta = async () => {
 
   setCarrito([])
   setMetodoPago('efectivo')
+  setClienteVentaId('')
   setBusquedaVenta('')
   setMensajeVenta('Venta registrada correctamente.')
   setGuardandoVenta(false)
@@ -649,6 +667,83 @@ const formatearFechaVenta = (fecha) => {
   }).format(new Date(fecha))
 }
 
+
+  // =========================
+  // CAJA
+  // =========================
+
+  const cargarCajaActual = async (negocioId) => {
+    if (!negocioId) return
+
+    setCargandoCaja(true)
+
+    const { data, error } = await supabase
+      .from('cajas')
+      .select('*')
+      .eq('negocio_id', negocioId)
+      .eq('estado', 'abierta')
+      .order('abierta_en', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error cargando caja:', error)
+      setMensajeCaja('No se pudo consultar el estado de la caja.')
+      setCargandoCaja(false)
+      return
+    }
+
+    setCajaActual(data ?? null)
+    setCargandoCaja(false)
+  }
+
+  useEffect(() => {
+    if (perfil?.negocio_id) {
+      cargarCajaActual(perfil.negocio_id)
+    }
+  }, [perfil?.negocio_id])
+
+  const abrirCaja = async (e) => {
+    e.preventDefault()
+    setMensajeCaja('')
+
+    const monto = Number(montoInicialCaja)
+
+    if (montoInicialCaja === '' || Number.isNaN(monto) || monto < 0) {
+      setMensajeCaja('Ingresa un monto inicial válido.')
+      return
+    }
+
+    setAbriendoCaja(true)
+
+    const { error } = await supabase.rpc('abrir_caja', {
+      p_monto_inicial: monto,
+    })
+
+    if (error) {
+      console.error('Error abriendo caja:', error)
+      setMensajeCaja(error.message)
+      setAbriendoCaja(false)
+      return
+    }
+
+    await cargarCajaActual(perfil.negocio_id)
+    setMontoInicialCaja('')
+    setMensajeCaja('Caja abierta correctamente.')
+    setAbriendoCaja(false)
+  }
+
+  const formatearFechaCaja = (fecha) => {
+    if (!fecha) return '—'
+
+    return new Intl.DateTimeFormat('es-CL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(fecha))
+  }
 
   // =========================
   // CLIENTES
@@ -985,10 +1080,14 @@ const formatearFechaVenta = (fecha) => {
       }
 
       if (data.user) {
-        setUsuario(data.user)
         setCorreo('')
         setPassword('')
         setMensaje('')
+
+        // Mantiene visible la transición de inicio de sesión antes de entrar al panel.
+        await new Promise((resolve) => setTimeout(resolve, 900))
+
+        setUsuario(data.user)
       }
     } catch (error) {
       console.error(error)
@@ -1042,6 +1141,24 @@ const formatearFechaVenta = (fecha) => {
           <p>Tu negocio en movimiento.</p>
           <div className="logout-spinner" aria-hidden="true" />
           <span>Cerrando sesión...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // =========================
+  // INICIANDO SESIÓN
+  // =========================
+
+  if (cargando && !modoRegistro) {
+    return (
+      <div className="logout-screen">
+        <div className="logout-screen-content">
+          <div className="logout-screen-logo">N</div>
+          <h1>NOREVIK</h1>
+          <p>Tu negocio en movimiento.</p>
+          <div className="logout-spinner" aria-hidden="true" />
+          <span>Iniciando sesión...</span>
         </div>
       </div>
     )
@@ -1230,6 +1347,14 @@ if (usuario) {
           >
             <span>📋</span>
             Inventario
+          </button>
+
+          <button
+            className={`menu-item ${seccion === 'caja' ? 'active' : ''}`}
+            onClick={() => setSeccion('caja')}
+          >
+            <span>💰</span>
+            Caja
           </button>
 
           <button
@@ -1561,7 +1686,7 @@ if (usuario) {
 
                 {carrito.length === 0 ? (
                   <div className="empty-state sale-cart-empty">
-                    <div className="empty-icon">▣</div>
+                    <div className="empty-icon">📦</div>
                     <strong>La venta está vacía</strong>
                     <span>Selecciona productos para comenzar.</span>
                   </div>
@@ -1620,6 +1745,21 @@ if (usuario) {
 
                 <div className="sale-checkout">
                   <div className="form-group">
+                    <label>Cliente</label>
+                    <select
+                      value={clienteVentaId}
+                      onChange={(e) => setClienteVentaId(e.target.value)}
+                    >
+                      <option value="">Cliente general / Sin identificar</option>
+                      {clientes.map((cliente) => (
+                        <option key={cliente.id} value={cliente.id}>
+                          {cliente.nombre}{cliente.rut ? ` · ${cliente.rut}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
                     <label>Método de pago</label>
                     <select
                       value={metodoPago}
@@ -1670,6 +1810,7 @@ if (usuario) {
                     <thead>
                       <tr>
                         <th>Fecha</th>
+                        <th>Cliente</th>
                         <th>Productos</th>
                         <th>Método de pago</th>
                         <th>Estado</th>
@@ -1681,6 +1822,12 @@ if (usuario) {
                       {ventas.map((venta) => (
                         <tr key={venta.id}>
                           <td>{formatearFechaVenta(venta.creado_en)}</td>
+                          <td>
+                            <strong>{venta.clientes?.nombre || 'Cliente general'}</strong>
+                            {venta.clientes?.rut && (
+                              <div className="sale-client-rut">{venta.clientes.rut}</div>
+                            )}
+                          </td>
                           <td>
                             <div className="sale-detail-products">
                               {(venta.detalle_ventas || []).map((detalle) => (
@@ -1754,6 +1901,13 @@ if (usuario) {
                   </div>
 
                   <div className="sale-detail-summary">
+                    <div>
+                      <span>Cliente</span>
+                      <strong>{ventaDetalle.clientes?.nombre || 'Cliente general'}</strong>
+                      {ventaDetalle.clientes?.rut && (
+                        <small>{ventaDetalle.clientes.rut}</small>
+                      )}
+                    </div>
                     <div>
                       <span>Método de pago</span>
                       <strong className="capitalize">{ventaDetalle.metodo_pago}</strong>
@@ -1916,7 +2070,7 @@ if (usuario) {
                     onClick={exportarProductosExcel}
                     disabled={productos.length === 0}
                   >
-                    Exportar Excel
+                    Exportar Catálogo
                   </button>
 
                   <button
@@ -2012,7 +2166,7 @@ if (usuario) {
               <article className="stat-card">
                 <div className="stat-top">
                   <span>Unidades en stock</span>
-                  <div className="stat-icon">▤</div>
+                  <div className="stat-icon">📊</div>
                 </div>
                 <strong className="stat-value">{stockTotal}</strong>
                 <span className="stat-detail">Stock total disponible</span>
@@ -2030,7 +2184,7 @@ if (usuario) {
               <article className="stat-card">
                 <div className="stat-top">
                   <span>Stock bajo</span>
-                  <div className="stat-icon">!</div>
+                  <div className="stat-icon">⚠️</div>
                 </div>
                 <strong className="stat-value">{productosStockBajo}</strong>
                 <span className="stat-detail">Necesitan reposición</span>
@@ -2039,7 +2193,7 @@ if (usuario) {
               <article className="stat-card">
                 <div className="stat-top">
                   <span>Sin stock</span>
-                  <div className="stat-icon">0</div>
+                  <div className="stat-icon">🚫</div>
                 </div>
                 <strong className="stat-value">{productosSinStock}</strong>
                 <span className="stat-detail">Productos agotados</span>
@@ -2352,6 +2506,143 @@ if (usuario) {
                 </div>
               )}
             </section>
+          </>
+        )}
+
+        {/* ========================= */}
+        {/* CAJA */}
+        {/* ========================= */}
+
+        {seccion === 'caja' && (
+          <>
+            <header className="dashboard-header">
+              <div>
+                <span className="dashboard-label">CAJA</span>
+                <h1>Control de caja</h1>
+                <p>Administra la apertura y el estado de la caja de {negocio}.</p>
+              </div>
+
+              <div className="business-name">
+                <span>Negocio</span>
+                <strong>{negocio}</strong>
+              </div>
+            </header>
+
+            {mensajeCaja && (
+              <p className="auth-message cash-message">{mensajeCaja}</p>
+            )}
+
+            {cargandoCaja ? (
+              <section className="dashboard-panel cash-panel">
+                <div className="cash-loading">Consultando estado de caja...</div>
+              </section>
+            ) : !cajaActual ? (
+              <section className="dashboard-panel cash-panel cash-closed-panel">
+                <div className="cash-status-badge closed">Caja cerrada</div>
+
+                <div className="cash-empty-state">
+                  <div className="cash-main-icon">💰</div>
+                  <span className="dashboard-label">INICIO DE JORNADA</span>
+                  <h2>Abre la caja para comenzar a vender</h2>
+                  <p>
+                    Ingresa el efectivo disponible al inicio de la jornada. Las ventas
+                    que registres quedarán asociadas automáticamente a esta caja.
+                  </p>
+
+                  <form className="cash-open-form" onSubmit={abrirCaja}>
+                    <div className="form-group">
+                      <label>Monto inicial en efectivo</label>
+                      <div className="cash-money-input">
+                        <span>$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={montoInicialCaja}
+                          onChange={(e) => setMontoInicialCaja(e.target.value)}
+                          placeholder="Ej: 50000"
+                          disabled={abriendoCaja}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="cash-open-button"
+                      disabled={abriendoCaja}
+                    >
+                      {abriendoCaja ? 'Abriendo caja...' : 'Abrir caja'}
+                    </button>
+                  </form>
+                </div>
+              </section>
+            ) : (
+              <>
+                <section className="dashboard-stats cash-stats">
+                  <article className="stat-card">
+                    <div className="stat-top">
+                      <span>Estado</span>
+                      <div className="stat-icon">●</div>
+                    </div>
+                    <strong className="stat-value cash-open-text">Abierta</strong>
+                    <span className="stat-detail">Caja operativa</span>
+                  </article>
+
+                  <article className="stat-card">
+                    <div className="stat-top">
+                      <span>Monto inicial</span>
+                      <div className="stat-icon">$</div>
+                    </div>
+                    <strong className="stat-value">
+                      ${Number(cajaActual.monto_inicial || 0).toLocaleString('es-CL')}
+                    </strong>
+                    <span className="stat-detail">Efectivo al abrir</span>
+                  </article>
+
+                  <article className="stat-card">
+                    <div className="stat-top">
+                      <span>Apertura</span>
+                      <div className="stat-icon">◷</div>
+                    </div>
+                    <strong className="cash-date-value">
+                      {formatearFechaCaja(cajaActual.abierta_en)}
+                    </strong>
+                    <span className="stat-detail">Inicio de la caja actual</span>
+                  </article>
+                </section>
+
+                <section className="dashboard-panel cash-panel">
+                  <div className="panel-heading cash-heading">
+                    <div>
+                      <h2>Caja actual</h2>
+                      <p>Las nuevas ventas quedarán vinculadas a esta jornada.</p>
+                    </div>
+                    <span className="cash-status-badge open">Caja abierta</span>
+                  </div>
+
+                  <div className="cash-current-info">
+                    <div>
+                      <span>Monto inicial</span>
+                      <strong>
+                        ${Number(cajaActual.monto_inicial || 0).toLocaleString('es-CL')}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Abierta desde</span>
+                      <strong>{formatearFechaCaja(cajaActual.abierta_en)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="cash-next-note">
+                    <strong>✓ Caja lista para operar</strong>
+                    <span>
+                      Ya puedes registrar ventas. En el siguiente paso agregaremos el
+                      resumen por método de pago y el cierre de caja.
+                    </span>
+                  </div>
+                </section>
+              </>
+            )}
           </>
         )}
 
@@ -2909,42 +3200,41 @@ if (usuario) {
             Ventas, inventario y clientes conectados
             en una sola plataforma.
           </p>
+<div className="preview-card">
 
-          <div className="preview-card">
+  <div className="preview-header">
+    <span>Lo que puedes gestionar</span>
+    <span>● Gestión en tiempo real</span>
+  </div>
 
-            <div className="preview-header">
-              <span>Resumen de hoy</span>
-              <span>● En línea</span>
-            </div>
+  <div className="preview-stats">
 
-            <div className="preview-stats">
+    <div>
+      <span>Ventas</span>
+      <strong>Control de ventas</strong>
+    </div>
 
-              <div>
-                <span>Ventas</span>
-                <strong>24</strong>
-              </div>
+    <div>
+      <span>Ingresos</span>
+      <strong>Control de ingresos</strong>
+    </div>
 
-              <div>
-                <span>Ingresos</span>
-                <strong>$328.900</strong>
-              </div>
+  </div>
 
-            </div>
+  <div className="preview-stock">
 
-            <div className="preview-stock">
+    <div>
+      <span>Inventario</span>
+      <strong>Stock actualizado</strong>
+    </div>
 
-              <div>
-                <span>Stock disponible</span>
-                <strong>486 productos</strong>
-              </div>
+    <span className="stock-alert">
+      Alertas de stock
+    </span>
 
-              <span className="stock-alert">
-                4 con stock bajo
-              </span>
+  </div>
 
-            </div>
-
-          </div>
+</div>
 
         </div>
 
