@@ -33,6 +33,29 @@ function App() {
     nombre: '', sku: '', categoria: '', precio_venta: '', costo: '', stock: '', stock_minimo: ''
   })
 
+  // INVENTARIO
+  const [busquedaInventario, setBusquedaInventario] = useState('')
+  const [movimientosInventario, setMovimientosInventario] = useState([])
+  const [productoMovimiento, setProductoMovimiento] = useState(null)
+  const [movimientoForm, setMovimientoForm] = useState({
+    tipo: 'entrada',
+    cantidad: '',
+    motivo: '',
+  })
+  const [guardandoMovimiento, setGuardandoMovimiento] = useState(false)
+  const [mensajeInventario, setMensajeInventario] = useState('')
+
+  // VENTAS
+  const [busquedaVenta, setBusquedaVenta] = useState('')
+  const [carrito, setCarrito] = useState([])
+  const [metodoPago, setMetodoPago] = useState('efectivo')
+  const [guardandoVenta, setGuardandoVenta] = useState(false)
+  const [mensajeVenta, setMensajeVenta] = useState('')
+  const [ventas, setVentas] = useState([])
+  const [ventaDetalle, setVentaDetalle] = useState(null)
+  const [anulandoVenta, setAnulandoVenta] = useState(false)
+  const [ventaPorAnular, setVentaPorAnular] = useState(null)
+
   // =========================
   // COMPROBAR SESIÓN
   // =========================
@@ -279,6 +302,334 @@ const exportarProductosExcel = () => {
   setMensajeProducto('Excel exportado correctamente.')
 }
 
+const cargarMovimientosInventario = async (negocioId) => {
+  if (!negocioId) return
+
+  const { data, error } = await supabase
+    .from('movimientos_inventario')
+    .select(`
+      id,
+      tipo,
+      cantidad,
+      stock_anterior,
+      stock_nuevo,
+      motivo,
+      creado_en,
+      producto_id,
+      productos (
+        nombre,
+        sku
+      )
+    `)
+    .eq('negocio_id', negocioId)
+    .order('creado_en', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    console.error('Error cargando movimientos:', error)
+    setMensajeInventario('No se pudo cargar el historial de inventario.')
+    return
+  }
+
+  setMovimientosInventario(data ?? [])
+}
+
+useEffect(() => {
+  if (perfil?.negocio_id) {
+    cargarMovimientosInventario(perfil.negocio_id)
+  }
+}, [perfil?.negocio_id])
+
+const abrirMovimientoStock = (producto) => {
+  setProductoMovimiento(producto)
+  setMovimientoForm({
+    tipo: 'entrada',
+    cantidad: '',
+    motivo: '',
+  })
+  setMensajeInventario('')
+}
+
+const cerrarMovimientoStock = () => {
+  setProductoMovimiento(null)
+  setMovimientoForm({
+    tipo: 'entrada',
+    cantidad: '',
+    motivo: '',
+  })
+}
+
+const registrarMovimientoStock = async (e) => {
+  e.preventDefault()
+  setMensajeInventario('')
+
+  if (!productoMovimiento) return
+
+  const cantidad = Number(movimientoForm.cantidad)
+
+  if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    setMensajeInventario('Ingresa una cantidad válida mayor a 0.')
+    return
+  }
+
+  if (
+    movimientoForm.tipo === 'salida' &&
+    cantidad > Number(productoMovimiento.stock || 0)
+  ) {
+    setMensajeInventario('No puedes retirar más unidades de las disponibles.')
+    return
+  }
+
+  setGuardandoMovimiento(true)
+
+  const { error } = await supabase.rpc('registrar_movimiento_inventario', {
+    p_producto_id: productoMovimiento.id,
+    p_tipo: movimientoForm.tipo,
+    p_cantidad: cantidad,
+    p_motivo: movimientoForm.motivo.trim() || null,
+  })
+
+  if (error) {
+    console.error('Error registrando movimiento:', error)
+    setMensajeInventario(error.message)
+    setGuardandoMovimiento(false)
+    return
+  }
+
+  await Promise.all([
+    cargarProductos(perfil.negocio_id),
+    cargarMovimientosInventario(perfil.negocio_id),
+  ])
+
+  const textoTipo =
+    movimientoForm.tipo === 'entrada'
+      ? 'Entrada'
+      : movimientoForm.tipo === 'salida'
+        ? 'Salida'
+        : 'Ajuste'
+
+  setMensajeInventario(`${textoTipo} registrada correctamente.`)
+  cerrarMovimientoStock()
+  setGuardandoMovimiento(false)
+}
+
+const formatearFechaMovimiento = (fecha) => {
+  if (!fecha) return '—'
+
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(fecha))
+}
+
+
+const cargarVentas = async (negocioId) => {
+  if (!negocioId) return
+
+  const { data, error } = await supabase
+    .from('ventas')
+    .select(`
+      id,
+      total,
+      metodo_pago,
+      estado,
+      creado_en,
+      detalle_ventas (
+        id,
+        cantidad,
+        precio_unitario,
+        subtotal,
+        productos (
+          nombre,
+          sku
+        )
+      )
+    `)
+    .eq('negocio_id', negocioId)
+    .order('creado_en', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    console.error('Error cargando ventas:', error)
+    setMensajeVenta('No se pudo cargar el historial de ventas.')
+    return
+  }
+
+  setVentas(data ?? [])
+}
+
+useEffect(() => {
+  if (perfil?.negocio_id) {
+    cargarVentas(perfil.negocio_id)
+  }
+}, [perfil?.negocio_id])
+
+const agregarAlCarrito = (producto) => {
+  setMensajeVenta('')
+
+  if (Number(producto.stock || 0) <= 0) {
+    setMensajeVenta(`${producto.nombre} no tiene stock disponible.`)
+    return
+  }
+
+  setCarrito((actual) => {
+    const existente = actual.find((item) => item.id === producto.id)
+
+    if (existente) {
+      if (existente.cantidad >= Number(producto.stock || 0)) {
+        setMensajeVenta(`Solo hay ${producto.stock} unidades disponibles de ${producto.nombre}.`)
+        return actual
+      }
+
+      return actual.map((item) =>
+        item.id === producto.id
+          ? { ...item, cantidad: item.cantidad + 1 }
+          : item
+      )
+    }
+
+    return [...actual, { ...producto, cantidad: 1 }]
+  })
+}
+
+const cambiarCantidadCarrito = (productoId, nuevaCantidad) => {
+  const producto = productos.find((item) => item.id === productoId)
+  if (!producto) return
+
+  if (nuevaCantidad <= 0) {
+    setCarrito((actual) => actual.filter((item) => item.id !== productoId))
+    return
+  }
+
+  if (nuevaCantidad > Number(producto.stock || 0)) {
+    setMensajeVenta(`Solo hay ${producto.stock} unidades disponibles de ${producto.nombre}.`)
+    return
+  }
+
+  setMensajeVenta('')
+  setCarrito((actual) =>
+    actual.map((item) =>
+      item.id === productoId
+        ? { ...item, cantidad: nuevaCantidad }
+        : item
+    )
+  )
+}
+
+const quitarDelCarrito = (productoId) => {
+  setCarrito((actual) => actual.filter((item) => item.id !== productoId))
+  setMensajeVenta('')
+}
+
+const registrarVenta = async () => {
+  setMensajeVenta('')
+
+  if (carrito.length === 0) {
+    setMensajeVenta('Agrega al menos un producto a la venta.')
+    return
+  }
+
+  const productosVenta = carrito.map((item) => ({
+    producto_id: item.id,
+    cantidad: item.cantidad,
+  }))
+
+  setGuardandoVenta(true)
+
+  const { error } = await supabase.rpc('registrar_venta', {
+    p_metodo_pago: metodoPago,
+    p_productos: productosVenta,
+  })
+
+  if (error) {
+    console.error('Error registrando venta:', error)
+    setMensajeVenta(error.message)
+    setGuardandoVenta(false)
+    return
+  }
+
+  await Promise.all([
+    cargarProductos(perfil.negocio_id),
+    cargarMovimientosInventario(perfil.negocio_id),
+    cargarVentas(perfil.negocio_id),
+  ])
+
+  setCarrito([])
+  setMetodoPago('efectivo')
+  setBusquedaVenta('')
+  setMensajeVenta('Venta registrada correctamente.')
+  setGuardandoVenta(false)
+}
+
+
+const abrirDetalleVenta = (venta) => {
+  setVentaDetalle(venta)
+  setMensajeVenta('')
+}
+
+const cerrarDetalleVenta = () => {
+  if (anulandoVenta) return
+  setVentaDetalle(null)
+}
+
+const solicitarAnulacionVenta = (venta) => {
+  if (!venta || venta.estado === 'anulada') return
+  setVentaPorAnular(venta)
+}
+
+const cerrarConfirmacionAnulacion = () => {
+  if (anulandoVenta) return
+  setVentaPorAnular(null)
+}
+
+const anularVenta = async () => {
+  const venta = ventaPorAnular
+
+  if (!venta || venta.estado === 'anulada') return
+
+  setAnulandoVenta(true)
+  setMensajeVenta('')
+
+  const { error } = await supabase.rpc('anular_venta', {
+    p_venta_id: venta.id,
+  })
+
+  if (error) {
+    console.error('Error anulando venta:', error)
+    setMensajeVenta(error.message)
+    setAnulandoVenta(false)
+    return
+  }
+
+  await Promise.all([
+    cargarProductos(perfil.negocio_id),
+    cargarMovimientosInventario(perfil.negocio_id),
+    cargarVentas(perfil.negocio_id),
+  ])
+
+  setVentaDetalle(null)
+  setVentaPorAnular(null)
+  setMensajeVenta(
+    'Venta anulada correctamente. El stock fue devuelto al inventario.'
+  )
+  setAnulandoVenta(false)
+}
+
+const formatearFechaVenta = (fecha) => {
+  if (!fecha) return '—'
+
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(fecha))
+}
+
   // =========================
   // CREAR CUENTA
   // =========================
@@ -437,6 +788,62 @@ if (usuario) {
     usuario.user_metadata?.nombre_negocio ||
     'Mi negocio'
 
+  const stockTotal = productos.reduce(
+    (total, producto) => total + Number(producto.stock || 0),
+    0
+  )
+
+  const productosStockBajo = productos.filter(
+    (producto) =>
+      Number(producto.stock) > 0 &&
+      Number(producto.stock) <= Number(producto.stock_minimo)
+  ).length
+
+  const productosSinStock = productos.filter(
+    (producto) => Number(producto.stock) === 0
+  ).length
+
+  const productosInventarioFiltrados = productos.filter((producto) => {
+    const termino = busquedaInventario.trim().toLowerCase()
+
+    if (!termino) return true
+
+    return (
+      producto.nombre?.toLowerCase().includes(termino) ||
+      producto.sku?.toLowerCase().includes(termino) ||
+      producto.categoria?.toLowerCase().includes(termino)
+    )
+  })
+
+  const productosVentaFiltrados = productos.filter((producto) => {
+    const termino = busquedaVenta.trim().toLowerCase()
+
+    if (!termino) return true
+
+    return (
+      producto.nombre?.toLowerCase().includes(termino) ||
+      producto.sku?.toLowerCase().includes(termino) ||
+      producto.categoria?.toLowerCase().includes(termino)
+    )
+  })
+
+  const totalCarrito = carrito.reduce(
+    (total, item) =>
+      total + Number(item.precio_venta || 0) * Number(item.cantidad || 0),
+    0
+  )
+
+  const hoyClave = new Date().toLocaleDateString('en-CA')
+  const ventasHoy = ventas.filter(
+    (venta) =>
+      venta.estado === 'completada' &&
+      new Date(venta.creado_en).toLocaleDateString('en-CA') === hoyClave
+  )
+  const ingresosHoy = ventasHoy.reduce(
+    (total, venta) => total + Number(venta.total || 0),
+    0
+  )
+
   return (
     <div className="dashboard">
 
@@ -464,7 +871,10 @@ if (usuario) {
             Panel de control
           </button>
 
-          <button className="menu-item">
+          <button
+            className={`menu-item ${seccion === 'ventas' ? 'active' : ''}`}
+            onClick={() => setSeccion('ventas')}
+          >
             <span>▣</span>
             Ventas
           </button>
@@ -479,7 +889,12 @@ if (usuario) {
             Productos
           </button>
 
-          <button className="menu-item">
+          <button
+            className={`menu-item ${
+              seccion === 'inventario' ? 'active' : ''
+            }`}
+            onClick={() => setSeccion('inventario')}
+          >
             <span>▤</span>
             Inventario
           </button>
@@ -553,10 +968,10 @@ if (usuario) {
                   <div className="stat-icon">$</div>
                 </div>
 
-                <strong className="stat-value">0</strong>
+                <strong className="stat-value">{ventasHoy.length}</strong>
 
                 <span className="stat-detail">
-                  Sin ventas registradas
+                  {ventasHoy.length === 1 ? 'Venta registrada hoy' : 'Ventas registradas hoy'}
                 </span>
               </article>
 
@@ -566,7 +981,7 @@ if (usuario) {
                   <div className="stat-icon">$</div>
                 </div>
 
-                <strong className="stat-value">$0</strong>
+                <strong className="stat-value">${ingresosHoy.toLocaleString('es-CL')}</strong>
 
                 <span className="stat-detail">
                   Total vendido hoy
@@ -616,7 +1031,10 @@ if (usuario) {
 
               <div className="quick-actions">
 
-                <button className="quick-card">
+                <button
+                  className="quick-card"
+                  onClick={() => setSeccion('ventas')}
+                >
                   <div className="quick-icon">+</div>
 
                   <div>
@@ -637,7 +1055,10 @@ if (usuario) {
                   </div>
                 </button>
 
-                <button className="quick-card">
+                <button
+                  className="quick-card"
+                  onClick={() => setSeccion('inventario')}
+                >
                   <div className="quick-icon">▤</div>
 
                   <div>
@@ -661,18 +1082,30 @@ if (usuario) {
                     <p>Últimas operaciones registradas</p>
                   </div>
 
-                  <button>Ver todas</button>
+                  <button onClick={() => setSeccion('ventas')}>Ver todas</button>
                 </div>
 
-                <div className="empty-state">
-                  <div className="empty-icon">📦</div>
-
-                  <strong>Aún no hay ventas</strong>
-
-                  <span>
-                    Las ventas que registres aparecerán aquí.
-                  </span>
-                </div>
+                {ventas.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">📦</div>
+                    <strong>Aún no hay ventas</strong>
+                    <span>Las ventas que registres aparecerán aquí.</span>
+                  </div>
+                ) : (
+                  <div className="recent-sales-list">
+                    {ventas.slice(0, 5).map((venta) => (
+                      <div className="recent-sale-row" key={venta.id}>
+                        <div>
+                          <strong>${Number(venta.total || 0).toLocaleString('es-CL')}</strong>
+                          <span>{formatearFechaVenta(venta.creado_en)}</span>
+                        </div>
+                        <span className="sale-payment">
+                          {venta.metodo_pago}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
               </article>
 
@@ -699,6 +1132,405 @@ if (usuario) {
               </article>
 
             </section>
+          </>
+        )}
+
+        {/* ========================= */}
+        {/* VENTAS */}
+        {/* ========================= */}
+
+        {seccion === 'ventas' && (
+          <>
+            <header className="dashboard-header">
+              <div>
+                <span className="dashboard-label">VENTAS</span>
+                <h1>Ventas</h1>
+                <p>Registra ventas y descuenta el stock automáticamente.</p>
+              </div>
+
+              <div className="business-name">
+                <span>Negocio</span>
+                <strong>{negocio}</strong>
+              </div>
+            </header>
+
+            {mensajeVenta && (
+              <p className="auth-message sales-message">{mensajeVenta}</p>
+            )}
+
+            <section className="sales-layout">
+              <article className="dashboard-panel sales-products-panel">
+                <div className="panel-heading sales-heading">
+                  <div>
+                    <h2>Seleccionar productos</h2>
+                    <p>Agrega productos disponibles a la venta.</p>
+                  </div>
+                </div>
+
+                <div className="sales-search">
+                  <input
+                    type="search"
+                    value={busquedaVenta}
+                    onChange={(e) => setBusquedaVenta(e.target.value)}
+                    placeholder="Buscar por producto, SKU o categoría..."
+                  />
+                </div>
+
+                {productosVentaFiltrados.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>No hay productos disponibles</strong>
+                    <span>Agrega productos o prueba con otra búsqueda.</span>
+                  </div>
+                ) : (
+                  <div className="sale-product-list">
+                    {productosVentaFiltrados.map((producto) => {
+                      const sinStock = Number(producto.stock || 0) <= 0
+
+                      return (
+                        <div className="sale-product-card" key={producto.id}>
+                          <div className="sale-product-info">
+                            <strong>{producto.nombre}</strong>
+                            <span>
+                              {producto.sku || 'Sin SKU'} · Stock: {producto.stock}
+                            </span>
+                          </div>
+
+                          <div className="sale-product-action">
+                            <strong>
+                              ${Number(producto.precio_venta || 0).toLocaleString('es-CL')}
+                            </strong>
+                            <button
+                              type="button"
+                              onClick={() => agregarAlCarrito(producto)}
+                              disabled={sinStock}
+                            >
+                              {sinStock ? 'Sin stock' : '+ Agregar'}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </article>
+
+              <article className="dashboard-panel sale-cart-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Venta actual</h2>
+                    <p>{carrito.length} producto{carrito.length === 1 ? '' : 's'} diferente{carrito.length === 1 ? '' : 's'}</p>
+                  </div>
+                </div>
+
+                {carrito.length === 0 ? (
+                  <div className="empty-state sale-cart-empty">
+                    <div className="empty-icon">▣</div>
+                    <strong>La venta está vacía</strong>
+                    <span>Selecciona productos para comenzar.</span>
+                  </div>
+                ) : (
+                  <div className="cart-items">
+                    {carrito.map((item) => (
+                      <div className="cart-item" key={item.id}>
+                        <div className="cart-item-top">
+                          <div>
+                            <strong>{item.nombre}</strong>
+                            <span>
+                              ${Number(item.precio_venta || 0).toLocaleString('es-CL')} c/u
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="cart-remove"
+                            onClick={() => quitarDelCarrito(item.id)}
+                            title="Quitar producto"
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        <div className="cart-item-bottom">
+                          <div className="quantity-control">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                cambiarCantidadCarrito(item.id, item.cantidad - 1)
+                              }
+                            >
+                              −
+                            </button>
+                            <strong>{item.cantidad}</strong>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                cambiarCantidadCarrito(item.id, item.cantidad + 1)
+                              }
+                              disabled={item.cantidad >= Number(item.stock || 0)}
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <strong>
+                            ${(Number(item.precio_venta || 0) * item.cantidad).toLocaleString('es-CL')}
+                          </strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="sale-checkout">
+                  <div className="form-group">
+                    <label>Método de pago</label>
+                    <select
+                      value={metodoPago}
+                      onChange={(e) => setMetodoPago(e.target.value)}
+                    >
+                      <option value="efectivo">Efectivo</option>
+                      <option value="debito">Débito</option>
+                      <option value="credito">Crédito</option>
+                      <option value="transferencia">Transferencia</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </div>
+
+                  <div className="sale-total">
+                    <span>Total</span>
+                    <strong>${totalCarrito.toLocaleString('es-CL')}</strong>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="login-button register-sale-button"
+                    onClick={registrarVenta}
+                    disabled={guardandoVenta || carrito.length === 0}
+                  >
+                    {guardandoVenta ? 'Registrando...' : 'Registrar venta'}
+                  </button>
+                </div>
+              </article>
+            </section>
+
+            <section className="dashboard-panel sales-history-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Historial de ventas</h2>
+                  <p>Últimas operaciones registradas en NOREVIK.</p>
+                </div>
+              </div>
+
+              {ventas.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">▣</div>
+                  <strong>Aún no hay ventas</strong>
+                  <span>Tu primera venta aparecerá aquí.</span>
+                </div>
+              ) : (
+                <div className="products-table-wrap">
+                  <table className="products-table sales-history-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Productos</th>
+                        <th>Método de pago</th>
+                        <th>Estado</th>
+                        <th>Total</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ventas.map((venta) => (
+                        <tr key={venta.id}>
+                          <td>{formatearFechaVenta(venta.creado_en)}</td>
+                          <td>
+                            <div className="sale-detail-products">
+                              {(venta.detalle_ventas || []).map((detalle) => (
+                                <span key={detalle.id}>
+                                  {detalle.productos?.nombre || 'Producto'} × {detalle.cantidad}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="capitalize">{venta.metodo_pago}</td>
+                          <td>
+                            <span className={`sale-status ${venta.estado}`}>
+                              {venta.estado === 'completada' ? 'Completada' : 'Anulada'}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>
+                              ${Number(venta.total || 0).toLocaleString('es-CL')}
+                            </strong>
+                          </td>
+                          <td>
+                            <div className="sale-row-actions">
+                              <button
+                                type="button"
+                                className="sale-detail-button"
+                                onClick={() => abrirDetalleVenta(venta)}
+                              >
+                                Ver detalle
+                              </button>
+                              {venta.estado !== 'anulada' && (
+                                <button
+                                  type="button"
+                                  className="sale-cancel-button"
+                                  onClick={() => solicitarAnulacionVenta(venta)}
+                                  disabled={anulandoVenta}
+                                >
+                                  Anular
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {ventaDetalle && (
+              <div className="sale-modal-backdrop" onClick={cerrarDetalleVenta}>
+                <div
+                  className="sale-detail-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="sale-detail-header">
+                    <div>
+                      <span className="dashboard-label">DETALLE DE VENTA</span>
+                      <h2>Venta registrada</h2>
+                      <p>{formatearFechaVenta(ventaDetalle.creado_en)}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="stock-modal-close"
+                      onClick={cerrarDetalleVenta}
+                      disabled={anulandoVenta}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="sale-detail-summary">
+                    <div>
+                      <span>Método de pago</span>
+                      <strong className="capitalize">{ventaDetalle.metodo_pago}</strong>
+                    </div>
+                    <div>
+                      <span>Estado</span>
+                      <span className={`sale-status ${ventaDetalle.estado}`}>
+                        {ventaDetalle.estado === 'completada' ? 'Completada' : 'Anulada'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sale-detail-items">
+                    <div className="sale-detail-items-header">
+                      <span>Producto</span>
+                      <span>Subtotal</span>
+                    </div>
+
+                    {(ventaDetalle.detalle_ventas || []).map((detalle) => (
+                      <div className="sale-detail-item" key={detalle.id}>
+                        <div>
+                          <strong>{detalle.productos?.nombre || 'Producto'}</strong>
+                          <span>
+                            {detalle.cantidad} × ${Number(detalle.precio_unitario || 0).toLocaleString('es-CL')}
+                          </span>
+                        </div>
+
+                        <strong>
+                          ${Number(detalle.subtotal || 0).toLocaleString('es-CL')}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="sale-detail-total">
+                    <span>Total de la venta</span>
+                    <strong>
+                      ${Number(ventaDetalle.total || 0).toLocaleString('es-CL')}
+                    </strong>
+                  </div>
+
+                  <div className="sale-detail-actions">
+                    <button
+                      type="button"
+                      onClick={cerrarDetalleVenta}
+                      disabled={anulandoVenta}
+                    >
+                      Cerrar
+                    </button>
+
+                    {ventaDetalle.estado !== 'anulada' && (
+                      <button
+                        type="button"
+                        className="sale-cancel-confirm"
+                        onClick={() => solicitarAnulacionVenta(ventaDetalle)}
+                        disabled={anulandoVenta}
+                      >
+                        {anulandoVenta ? 'Anulando...' : 'Anular venta'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {ventaPorAnular && (
+              <div
+                className="sale-modal-backdrop"
+                onClick={cerrarConfirmacionAnulacion}
+              >
+                <div
+                  className="norevik-confirm-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="norevik-confirm-icon">!</div>
+
+                  <span className="dashboard-label">NOREVIK</span>
+                  <h2>Anular venta</h2>
+
+                  <p>
+                    ¿Deseas anular esta venta por{' '}
+                    <strong>
+                      ${Number(ventaPorAnular.total || 0).toLocaleString('es-CL')}
+                    </strong>
+                    ?
+                  </p>
+
+                  <div className="norevik-confirm-info">
+                    Las unidades vendidas serán devueltas automáticamente al
+                    inventario y la venta quedará marcada como anulada.
+                  </div>
+
+                  <div className="norevik-confirm-actions">
+                    <button
+                      type="button"
+                      className="norevik-confirm-cancel"
+                      onClick={cerrarConfirmacionAnulacion}
+                      disabled={anulandoVenta}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      className="norevik-confirm-danger"
+                      onClick={anularVenta}
+                      disabled={anulandoVenta}
+                    >
+                      {anulandoVenta ? 'Anulando...' : 'Anular venta'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -814,6 +1646,374 @@ if (usuario) {
                 </div>
               )}
 
+            </section>
+          </>
+        )}
+
+        {/* ========================= */}
+        {/* INVENTARIO */}
+        {/* ========================= */}
+
+        {seccion === 'inventario' && (
+          <>
+            <header className="dashboard-header">
+              <div>
+                <span className="dashboard-label">INVENTARIO</span>
+                <h1>Inventario</h1>
+                <p>
+                  Controla las existencias y detecta productos que necesitan reposición.
+                </p>
+              </div>
+
+              <div className="business-name">
+                <span>Negocio</span>
+                <strong>{negocio}</strong>
+              </div>
+            </header>
+
+            <section className="dashboard-stats inventory-stats">
+              <article className="stat-card">
+                <div className="stat-top">
+                  <span>Unidades en stock</span>
+                  <div className="stat-icon">▤</div>
+                </div>
+                <strong className="stat-value">{stockTotal}</strong>
+                <span className="stat-detail">Stock total disponible</span>
+              </article>
+
+              <article className="stat-card">
+                <div className="stat-top">
+                  <span>Productos</span>
+                  <div className="stat-icon">□</div>
+                </div>
+                <strong className="stat-value">{productos.length}</strong>
+                <span className="stat-detail">Productos en inventario</span>
+              </article>
+
+              <article className="stat-card">
+                <div className="stat-top">
+                  <span>Stock bajo</span>
+                  <div className="stat-icon">!</div>
+                </div>
+                <strong className="stat-value">{productosStockBajo}</strong>
+                <span className="stat-detail">Necesitan reposición</span>
+              </article>
+
+              <article className="stat-card">
+                <div className="stat-top">
+                  <span>Sin stock</span>
+                  <div className="stat-icon">0</div>
+                </div>
+                <strong className="stat-value">{productosSinStock}</strong>
+                <span className="stat-detail">Productos agotados</span>
+              </article>
+            </section>
+
+            <section className="dashboard-panel inventory-panel">
+              <div className="panel-heading inventory-heading">
+                <div>
+                  <h2>Existencias</h2>
+                  <p>Consulta el stock actual de todos tus productos.</p>
+                </div>
+
+                <div className="inventory-search">
+                  <input
+                    type="search"
+                    value={busquedaInventario}
+                    onChange={(e) => setBusquedaInventario(e.target.value)}
+                    placeholder="Buscar por producto, SKU o categoría..."
+                  />
+                </div>
+              </div>
+
+              {cargandoProductos ? (
+                <div className="empty-state">
+                  <strong>Cargando inventario...</strong>
+                </div>
+              ) : productos.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">▤</div>
+                  <strong>Aún no hay inventario</strong>
+                  <span>Agrega productos para comenzar a controlar tus existencias.</span>
+                </div>
+              ) : productosInventarioFiltrados.length === 0 ? (
+                <div className="empty-state">
+                  <strong>No encontramos productos</strong>
+                  <span>Prueba con otro nombre, SKU o categoría.</span>
+                </div>
+              ) : (
+                <div className="products-table-wrap">
+                  <table className="products-table inventory-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>SKU</th>
+                        <th>Categoría</th>
+                        <th>Stock actual</th>
+                        <th>Stock mínimo</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productosInventarioFiltrados.map((producto) => {
+                        const stock = Number(producto.stock || 0)
+                        const stockMinimo = Number(producto.stock_minimo || 0)
+                        const sinStock = stock === 0
+                        const stockBajo = stock > 0 && stock <= stockMinimo
+
+                        return (
+                          <tr key={producto.id}>
+                            <td><strong>{producto.nombre}</strong></td>
+                            <td>{producto.sku || '—'}</td>
+                            <td>{producto.categoria || '—'}</td>
+                            <td><strong>{stock}</strong></td>
+                            <td>{stockMinimo}</td>
+                            <td>
+                              <span
+                                className={
+                                  sinStock
+                                    ? 'product-status out'
+                                    : stockBajo
+                                      ? 'product-status low'
+                                      : 'product-status ok'
+                                }
+                              >
+                                {sinStock
+                                  ? 'Sin stock'
+                                  : stockBajo
+                                    ? 'Stock bajo'
+                                    : 'Disponible'}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="stock-move-button"
+                                onClick={() => abrirMovimientoStock(producto)}
+                              >
+                                Mover stock
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {productoMovimiento && (
+              <div className="stock-modal-backdrop" onClick={cerrarMovimientoStock}>
+                <div
+                  className="stock-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="stock-modal-header">
+                    <div>
+                      <span className="dashboard-label">MOVIMIENTO DE STOCK</span>
+                      <h2>{productoMovimiento.nombre}</h2>
+                      <p>
+                        Stock actual: <strong>{productoMovimiento.stock}</strong>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="stock-modal-close"
+                      onClick={cerrarMovimientoStock}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <form onSubmit={registrarMovimientoStock}>
+                    <div className="stock-type-selector">
+                      <button
+                        type="button"
+                        className={movimientoForm.tipo === 'entrada' ? 'active' : ''}
+                        onClick={() =>
+                          setMovimientoForm({
+                            ...movimientoForm,
+                            tipo: 'entrada',
+                          })
+                        }
+                      >
+                        + Entrada
+                      </button>
+
+                      <button
+                        type="button"
+                        className={movimientoForm.tipo === 'salida' ? 'active' : ''}
+                        onClick={() =>
+                          setMovimientoForm({
+                            ...movimientoForm,
+                            tipo: 'salida',
+                          })
+                        }
+                      >
+                        − Salida
+                      </button>
+
+                      <button
+                        type="button"
+                        className={movimientoForm.tipo === 'ajuste' ? 'active' : ''}
+                        onClick={() =>
+                          setMovimientoForm({
+                            ...movimientoForm,
+                            tipo: 'ajuste',
+                          })
+                        }
+                      >
+                        Ajustar
+                      </button>
+                    </div>
+
+                    <div className="form-group">
+                      <label>
+                        {movimientoForm.tipo === 'ajuste'
+                          ? 'Nuevo stock'
+                          : 'Cantidad'}
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={movimientoForm.cantidad}
+                        onChange={(e) =>
+                          setMovimientoForm({
+                            ...movimientoForm,
+                            cantidad: e.target.value,
+                          })
+                        }
+                        placeholder={
+                          movimientoForm.tipo === 'ajuste'
+                            ? 'Ej: 25'
+                            : 'Ej: 10'
+                        }
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Motivo</label>
+                      <input
+                        type="text"
+                        value={movimientoForm.motivo}
+                        onChange={(e) =>
+                          setMovimientoForm({
+                            ...movimientoForm,
+                            motivo: e.target.value,
+                          })
+                        }
+                        placeholder={
+                          movimientoForm.tipo === 'entrada'
+                            ? 'Ej: Reposición de mercadería'
+                            : movimientoForm.tipo === 'salida'
+                              ? 'Ej: Producto dañado'
+                              : 'Ej: Corrección de inventario'
+                        }
+                      />
+                    </div>
+
+                    <div className="stock-modal-actions">
+                      <button
+                        type="button"
+                        onClick={cerrarMovimientoStock}
+                        disabled={guardandoMovimiento}
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="login-button"
+                        disabled={guardandoMovimiento}
+                      >
+                        {guardandoMovimiento
+                          ? 'Guardando...'
+                          : 'Confirmar movimiento'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {mensajeInventario && (
+              <p className="auth-message inventory-message">
+                {mensajeInventario}
+              </p>
+            )}
+
+            <section className="dashboard-panel inventory-history-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Historial de movimientos</h2>
+                  <p>Últimos cambios realizados en el inventario.</p>
+                </div>
+              </div>
+
+              {movimientosInventario.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">↕</div>
+                  <strong>Aún no hay movimientos</strong>
+                  <span>Las entradas, salidas y ajustes aparecerán aquí.</span>
+                </div>
+              ) : (
+                <div className="products-table-wrap">
+                  <table className="products-table inventory-history-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Producto</th>
+                        <th>Tipo</th>
+                        <th>Cantidad</th>
+                        <th>Stock</th>
+                        <th>Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {movimientosInventario.map((movimiento) => (
+                        <tr key={movimiento.id}>
+                          <td>{formatearFechaMovimiento(movimiento.creado_en)}</td>
+                          <td>
+                            <strong>
+                              {movimiento.productos?.nombre || 'Producto'}
+                            </strong>
+                            <span className="movement-sku">
+                              {movimiento.productos?.sku || ''}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`movement-type ${movimiento.tipo}`}>
+                              {movimiento.tipo === 'entrada'
+                                ? 'Entrada'
+                                : movimiento.tipo === 'salida'
+                                  ? 'Salida'
+                                  : 'Ajuste'}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>
+                              {movimiento.tipo === 'entrada'
+                                ? `+${movimiento.cantidad}`
+                                : movimiento.tipo === 'salida'
+                                  ? `−${movimiento.cantidad}`
+                                  : movimiento.cantidad}
+                            </strong>
+                          </td>
+                          <td>
+                            {movimiento.stock_anterior} → {movimiento.stock_nuevo}
+                          </td>
+                          <td>{movimiento.motivo || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           </>
         )}
