@@ -1004,6 +1004,20 @@ button {
 
   margin-left: 250px;
   padding: 40px 44px 60px;
+
+  background:
+    linear-gradient(
+      rgba(3, 10, 22, 0.82),
+      rgba(3, 10, 22, 0.82)
+    ),
+    url('/fondonorevik.png');
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+
+  color: #ffffff;
 }
 
 .dashboard-header {
@@ -2418,7 +2432,890 @@ button {
     grid-template-columns: 1fr;
   }
 }
+/* =========================
+   CLIENTES
+========================= */
+
+.clients-stats {
+  grid-template-columns: minmax(220px, 280px);
+}
+
+.clients-panel {
+  margin-top: 22px;
+}
+
+.clients-heading {
+  align-items: center;
+}
+
+.clients-heading > button {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 16px;
+  background: #111827;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.clients-heading > button:hover {
+  opacity: 0.92;
+}
+
+.clients-search {
+  margin: 18px 0;
+}
+
+.clients-search input {
+  width: min(460px, 100%);
+  padding: 11px 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  outline: none;
+  background: #ffffff;
+  color: #111827;
+}
+
+.clients-search input:focus {
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.06);
+}
+
+.clients-message {
+  margin: 12px 0 0;
+}
+
+.client-edit-button {
+  padding: 7px 11px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-edit-button:hover {
+  background: #f9fafb;
+}
+
+.client-modal {
+  width: min(720px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(17, 24, 39, 0.25);
+}
+
+.client-form {
+  margin-top: 20px;
+}
+
+.client-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.client-full-field {
+  grid-column: 1 / -1;
+}
+
+.client-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 100px;
+  padding: 11px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.client-form textarea:focus {
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.06);
+}
+
+.client-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.client-form-actions button {
+  min-height: 42px;
+  padding: 10px 15px;
+  border-radius: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-form-actions > button:first-child {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+}
+
+.client-form-actions .login-button {
+  width: auto;
+  border: 0;
+}
+
+@media (max-width: 700px) {
+  .clients-heading {
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .clients-heading > button {
+    width: 100%;
+  }
+
+  .client-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .client-full-field {
+    grid-column: auto;
+  }
+
+  .client-form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .client-form-actions button {
+    width: 100%;
+  }
+}
+/* AJUSTES CLIENTES - CHILE */
+
+.client-field-hint {
+  display: block;
+  margin-top: 6px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.client-phone-input {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.client-phone-prefix {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-right: 0;
+  border-radius: 9px 0 0 9px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.client-phone-input input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 0 9px 9px 0 !important;
+}
+
+.client-phone-input:focus-within .client-phone-prefix {
+  border-color: #9ca3af;
+}
+
+@media (max-width: 500px) {
+  .client-phone-prefix {
+    padding: 0 10px;
+  }
+}
+/* =========================
+   CLIENTES - VALIDACION Y ELIMINACION
+   Pegar al final de App.css
+========================= */
+
+.client-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.client-delete-button,
+.client-delete-modal-button {
+  border: 1px solid #ef4444 !important;
+  background: #ffffff !important;
+  color: #dc2626 !important;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-delete-button {
+  padding: 7px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.client-delete-button:hover,
+.client-delete-modal-button:hover:not(:disabled) {
+  background: #fef2f2 !important;
+}
+
+.client-delete-modal-button {
+  margin-right: auto;
+}
+
+.client-delete-confirm-modal {
+  position: relative;
+  width: min(440px, 100%);
+  padding: 30px;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(17, 24, 39, 0.28);
+  text-align: center;
+}
+
+.client-delete-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.client-delete-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 16px;
+  border: 1px solid #fecaca;
+  border-radius: 50%;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 25px;
+  font-weight: 800;
+}
+
+.client-delete-confirm-modal h2 {
+  margin: 7px 0 10px;
+  color: #111827;
+  font-size: 23px;
+}
+
+.client-delete-confirm-modal > p {
+  margin: 0;
+  color: #6b7280;
+  line-height: 1.55;
+}
+
+.client-delete-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #6b7280;
+  text-align: left;
+  font-size: 13px;
+}
+
+.client-delete-info strong {
+  margin-bottom: 3px;
+  color: #111827;
+  font-size: 15px;
+}
+
+@media (max-width: 600px) {
+  .client-row-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .client-delete-modal-button {
+    margin-right: 0;
+  }
+
+  .client-delete-confirm-modal {
+    padding: 26px 20px 22px;
+  }
+}
 
 
 
 
+
+
+/* =========================
+   CLIENTES — BUSCADOR EN CABECERA
+========================= */
+
+.clients-heading {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(320px, 460px) auto;
+  align-items: center;
+  gap: 28px;
+}
+
+.clients-heading-info {
+  min-width: 0;
+}
+
+.clients-heading .clients-search {
+  width: 100%;
+  margin: 0;
+}
+
+.clients-heading .clients-search input {
+  width: 100%;
+}
+
+.clients-heading > button {
+  white-space: nowrap;
+}
+
+@media (max-width: 1050px) {
+  .clients-heading {
+    grid-template-columns: 1fr auto;
+  }
+
+  .clients-heading .clients-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 650px) {
+  .clients-heading {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .clients-heading .clients-search,
+  .clients-heading > button {
+    grid-column: 1;
+  }
+
+  .clients-heading > button {
+    width: 100%;
+  }
+}
+/* FONDO GENERAL */
+.dashboard-main {
+  background: #5c444438;
+}
+
+/* TARJETAS SOBRE EL FONDO */
+.sales-products-panel,
+.current-sale-panel,
+.dashboard-panel,
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(17, 24, 39, 0.04);
+}
+
+
+/* =========================================================
+   VENTAS NOREVIK — LAYOUT COMPACTO
+   Ajuste visual para evitar paneles altos y espacios vacíos
+========================================================= */
+
+.sales-layout {
+  grid-template-columns: minmax(0, 1.65fr) minmax(330px, 0.85fr);
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.sales-products-panel,
+.sale-cart-panel {
+  min-height: 0;
+  height: auto;
+  padding: 18px;
+}
+
+.sales-products-panel {
+  align-self: start;
+}
+
+.sales-heading {
+  margin-bottom: 12px;
+}
+
+.sales-search {
+  margin-bottom: 10px;
+}
+
+.sales-search input {
+  min-height: 40px;
+  border-radius: 9px;
+}
+
+.sale-product-list {
+  gap: 0;
+}
+
+.sale-product-card {
+  min-height: 62px;
+  padding: 10px 2px;
+  gap: 14px;
+}
+
+.sale-product-info {
+  gap: 3px;
+}
+
+.sale-product-info strong {
+  font-size: 13px;
+}
+
+.sale-product-info span {
+  font-size: 11px;
+}
+
+.sale-product-action {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+
+.sale-product-action > strong {
+  min-width: 72px;
+  text-align: right;
+  font-size: 13px;
+}
+
+.sale-product-action button {
+  min-width: 88px;
+  padding: 7px 10px;
+}
+
+.sale-cart-panel {
+  position: sticky;
+  top: 20px;
+}
+
+.sale-cart-panel > .panel-heading {
+  margin-bottom: 8px;
+}
+
+.sale-cart-empty {
+  min-height: 92px;
+  padding: 12px 0;
+}
+
+.sale-cart-empty .empty-icon {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 7px;
+  font-size: 14px;
+}
+
+.sale-checkout {
+  margin-top: 12px;
+  padding-top: 14px;
+}
+
+.sale-checkout .form-group {
+  margin-bottom: 12px;
+}
+
+.sale-checkout select {
+  min-height: 40px;
+}
+
+.sale-total {
+  margin: 12px 0 14px;
+}
+
+.sale-total strong {
+  font-size: 23px;
+}
+
+.register-sale-button {
+  height: 44px;
+  margin-top: 0;
+}
+
+.sales-history-panel {
+  margin-top: 0;
+  min-height: 0;
+}
+
+/* Quita la altura mínima genérica solo en los paneles de Ventas */
+.sales-products-panel.dashboard-panel,
+.sale-cart-panel.dashboard-panel,
+.sales-history-panel.dashboard-panel {
+  min-height: 0;
+}
+
+@media (max-width: 1050px) {
+  .sales-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .sale-cart-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 600px) {
+  .sales-products-panel,
+  .sale-cart-panel {
+    padding: 16px;
+  }
+
+  .sale-product-action {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sale-product-action button {
+    width: auto;
+  }
+}
+
+/* ========================================
+   NOREVIK — CONTRASTE DE TEXTOS
+   Fondo claro = texto oscuro / fondo oscuro = texto blanco
+======================================== */
+
+/* Superficies claras */
+.login-panel,
+.dashboard,
+.dashboard-main,
+.sidebar,
+.business-name,
+.stat-card,
+.quick-card,
+.dashboard-panel,
+.product-form,
+.products-table-wrap,
+.stock-modal,
+.sale-detail-modal,
+.norevik-confirm-modal,
+.sale-product-card,
+.cart-item {
+  color: #111827;
+}
+
+/* Textos secundarios que antes se veían demasiado grises sobre blanco */
+.sidebar-brand span,
+.menu-item,
+.sidebar-user span,
+.logout-button,
+.dashboard-label,
+.dashboard-header p,
+.business-name span,
+.stat-top,
+.stat-detail,
+.section-heading p,
+.panel-heading p,
+.panel-heading button,
+.empty-state,
+.empty-state strong,
+.quick-card span,
+.product-form .form-group label,
+.products-table td,
+.stock-modal-header p,
+.movement-sku,
+.sale-product-info span,
+.cart-item-top span,
+.sale-total span,
+.recent-sale-row > div span,
+.sale-detail-header p,
+.sale-detail-summary > div > span:first-child,
+.sale-detail-items-header,
+.sale-detail-item span,
+.sale-detail-total span,
+.norevik-confirm-modal > p,
+.norevik-confirm-info {
+  color: #111827;
+}
+
+/* Mantener placeholders diferenciados, pero legibles */
+input::placeholder,
+textarea::placeholder {
+  color: #4b5563;
+  opacity: 1;
+}
+
+/* Superficies oscuras */
+.brand-icon,
+.sidebar-logo,
+.menu-item.active,
+.quick-icon,
+.login-button,
+.product-form-actions .login-button,
+.stock-type-selector button.active,
+.sale-cancel-confirm {
+  color: #ffffff;
+}
+
+/* Todo texto dentro del elemento activo del menú queda blanco */
+.menu-item.active,
+.menu-item.active span {
+  color: #ffffff;
+}
+
+/* Zona visual oscura del login */
+.login-visual,
+.login-visual .visual-content,
+.login-visual .visual-content h3,
+.login-visual .visual-content p,
+.login-visual .preview-card,
+.login-visual .preview-header,
+.login-visual .preview-stats span,
+.login-visual .preview-stock span {
+  color: #ffffff;
+}
+
+/* Colores semánticos: se conservan para distinguir estados */
+.product-status.ok { color: #32734a; }
+.product-status.low { color: #a76517; }
+.movement-type.entrada,
+.sale-status.completada { color: #047857; }
+.movement-type.salida,
+.sale-status.anulada,
+.sale-cancel-button,
+.norevik-confirm-icon { color: #b91c1c; }
+
+
+/* ========================================
+   FONDO PRINCIPAL NOREVIK
+   Imagen: public/fondonorevik.png
+======================================== */
+
+.dashboard-main {
+  background:
+    linear-gradient(rgba(3, 10, 22, 0.82), rgba(3, 10, 22, 0.82)),
+    url('/fondonorevik.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: #ffffff;
+}
+
+/* Textos que están directamente sobre el fondo oscuro */
+.dashboard-main > .dashboard-header .dashboard-label,
+.dashboard-main > .dashboard-header h1,
+.dashboard-main > .dashboard-header p,
+.dashboard-main .quick-section > .section-heading h2,
+.dashboard-main .quick-section > .section-heading p {
+  color: #ffffff;
+}
+
+/* El contenido de tarjetas y paneles blancos se mantiene oscuro */
+.dashboard-main .stat-card,
+.dashboard-main .quick-card,
+.dashboard-main .dashboard-panel,
+.dashboard-main .business-name {
+  color: #111827;
+}
+
+
+/* ========================================
+   TRANSICIÓN AL CERRAR SESIÓN
+======================================== */
+
+.logout-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f4f5f7;
+  color: #111827;
+}
+
+.logout-screen-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.logout-screen-logo {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 15px;
+  border-radius: 15px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.logout-screen-content h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 3px;
+}
+
+.logout-screen-content p {
+  margin: 6px 0 28px;
+  color: #8a9099;
+  font-size: 12px;
+}
+
+.logout-spinner {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 13px;
+  border: 3px solid #dfe3e8;
+  border-top-color: #111827;
+  border-radius: 50%;
+  animation: norevik-spin 0.75s linear infinite;
+}
+
+.logout-screen-content > span {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.logout-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes norevik-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* ========================================
+   CONFIRMACIÓN CERRAR SESIÓN — NOREVIK
+======================================== */
+
+.logout-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 10, 22, 0.68);
+  backdrop-filter: blur(5px);
+  animation: logoutFadeIn 0.18s ease;
+}
+
+.logout-confirm-modal {
+  width: min(430px, 100%);
+  padding: 30px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #111827;
+  text-align: center;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.3);
+  animation: logoutModalIn 0.2s ease;
+}
+
+.logout-confirm-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.logout-confirm-modal h2 {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 22px;
+}
+
+.logout-confirm-modal p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.logout-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.logout-confirm-actions button {
+  min-height: 43px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.logout-confirm-cancel {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+}
+
+.logout-confirm-cancel:hover {
+  background: #f3f4f6;
+}
+
+.logout-confirm-accept {
+  border: 1px solid #111827;
+  background: #111827;
+  color: #ffffff;
+}
+
+.logout-confirm-accept:hover {
+  background: #242d3d;
+}
+
+@keyframes logoutFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes logoutModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 480px) {
+  .logout-confirm-modal {
+    padding: 24px 20px;
+  }
+
+  .logout-confirm-actions {
+    grid-template-columns: 1fr;
+  }
+}

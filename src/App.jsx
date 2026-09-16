@@ -9,7 +9,10 @@ function App() {
   // USUARIO / SESIÓN
   const [usuario, setUsuario] = useState(null)
   const [cargandoSesion, setCargandoSesion] = useState(true)
-  const [perfil, setPerfil] = useState(null)
+  const [cerrandoSesion, setCerrandoSesion] = useState(false)
+  
+  const [confirmarCerrarSesion, setConfirmarCerrarSesion] = useState(false)
+const [perfil, setPerfil] = useState(null)
   const [seccion, setSeccion] = useState('dashboard')
 
   // DATOS DEL REGISTRO / LOGIN
@@ -55,6 +58,22 @@ function App() {
   const [ventaDetalle, setVentaDetalle] = useState(null)
   const [anulandoVenta, setAnulandoVenta] = useState(false)
   const [ventaPorAnular, setVentaPorAnular] = useState(null)
+
+  // CLIENTES
+  const [clientes, setClientes] = useState([])
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [mostrarFormularioCliente, setMostrarFormularioCliente] = useState(false)
+  const [guardandoCliente, setGuardandoCliente] = useState(false)
+  const [mensajeCliente, setMensajeCliente] = useState('')
+  const [clienteEditando, setClienteEditando] = useState(null)
+  const [clientePorEliminar, setClientePorEliminar] = useState(null)
+  const [eliminandoCliente, setEliminandoCliente] = useState(false)
+  const [clienteForm, setClienteForm] = useState({
+    nombre: '',
+    rut: '',
+    telefono: '',
+    correo: '',
+  })
 
   // =========================
   // COMPROBAR SESIÓN
@@ -630,6 +649,247 @@ const formatearFechaVenta = (fecha) => {
   }).format(new Date(fecha))
 }
 
+
+  // =========================
+  // CLIENTES
+  // =========================
+
+  const calcularDigitoVerificadorRut = (rutNumerico) => {
+    if (!rutNumerico) return ''
+
+    let suma = 0
+    let multiplicador = 2
+
+    for (let i = rutNumerico.length - 1; i >= 0; i -= 1) {
+      suma += Number(rutNumerico[i]) * multiplicador
+      multiplicador = multiplicador === 7 ? 2 : multiplicador + 1
+    }
+
+    const resultado = 11 - (suma % 11)
+
+    if (resultado === 11) return '0'
+    if (resultado === 10) return 'K'
+    return String(resultado)
+  }
+
+  const formatearRutAutomatico = (valor) => {
+    const cuerpo = String(valor || '').replace(/\D/g, '').slice(0, 8)
+    if (!cuerpo) return ''
+
+    const dv = calcularDigitoVerificadorRut(cuerpo)
+    const cuerpoFormateado = Number(cuerpo).toLocaleString('es-CL')
+    return `${cuerpoFormateado}-${dv}`
+  }
+
+  const cambiarRutCliente = (valor) => {
+    const soloNumeros = String(valor || '').replace(/\D/g, '').slice(0, 8)
+    setClienteForm((actual) => ({ ...actual, rut: soloNumeros }))
+  }
+
+  const cambiarTelefonoCliente = (valor) => {
+    let soloNumeros = String(valor || '').replace(/\D/g, '')
+    if (soloNumeros.startsWith('56')) soloNumeros = soloNumeros.slice(2)
+    soloNumeros = soloNumeros.slice(0, 9)
+    setClienteForm((actual) => ({ ...actual, telefono: soloNumeros }))
+  }
+
+  const formatearTelefonoChile = (telefono) => {
+    const numeros = String(telefono || '').replace(/\D/g, '').replace(/^56/, '')
+    if (!numeros) return ''
+    if (numeros.length <= 1) return numeros
+    if (numeros.length <= 5) return `${numeros.slice(0, 1)} ${numeros.slice(1)}`
+    return `${numeros.slice(0, 1)} ${numeros.slice(1, 5)} ${numeros.slice(5, 9)}`
+  }
+
+  const cargarClientes = async (negocioId) => {
+    if (!negocioId) return
+
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .eq('negocio_id', negocioId)
+      .eq('activo', true)
+      .order('creado_en', { ascending: false })
+
+    if (error) {
+      console.error('Error cargando clientes:', error)
+      setMensajeCliente('No se pudieron cargar los clientes.')
+      return
+    }
+
+    setClientes(data ?? [])
+  }
+
+  useEffect(() => {
+    if (perfil?.negocio_id) {
+      cargarClientes(perfil.negocio_id)
+    }
+  }, [perfil?.negocio_id])
+
+  const limpiarFormularioCliente = () => {
+    setClienteForm({
+      nombre: '',
+      rut: '',
+      telefono: '',
+      correo: '',
+    })
+    setClienteEditando(null)
+  }
+
+  const abrirNuevoCliente = () => {
+    limpiarFormularioCliente()
+    setMensajeCliente('')
+    setMostrarFormularioCliente(true)
+  }
+
+  const abrirEditarCliente = (cliente) => {
+    setClienteEditando(cliente)
+    setClienteForm({
+      nombre: cliente.nombre || '',
+      rut: (cliente.rut || '').split('-')[0].replace(/\D/g, ''),
+      telefono: (cliente.telefono || '').replace(/^\+?56/, '').replace(/\D/g, ''),
+      correo: cliente.correo || '',
+    })
+    setMensajeCliente('')
+    setMostrarFormularioCliente(true)
+  }
+
+  const cerrarFormularioCliente = () => {
+    if (guardandoCliente) return
+    setMostrarFormularioCliente(false)
+    limpiarFormularioCliente()
+    setMensajeCliente('')
+  }
+
+  const solicitarEliminarCliente = (cliente) => {
+    if (!cliente) return
+    setClientePorEliminar(cliente)
+    setMensajeCliente('')
+  }
+
+  const cerrarEliminarCliente = () => {
+    if (eliminandoCliente) return
+    setClientePorEliminar(null)
+  }
+
+  const eliminarCliente = async () => {
+    if (!clientePorEliminar || !perfil?.negocio_id) return
+
+    setEliminandoCliente(true)
+    setMensajeCliente('')
+
+    const { error } = await supabase
+      .from('clientes')
+      .update({ activo: false })
+      .eq('id', clientePorEliminar.id)
+      .eq('negocio_id', perfil.negocio_id)
+
+    if (error) {
+      console.error('Error eliminando cliente:', error)
+      setMensajeCliente(error.message)
+      setEliminandoCliente(false)
+      return
+    }
+
+    await cargarClientes(perfil.negocio_id)
+
+    setClientePorEliminar(null)
+    setMostrarFormularioCliente(false)
+    limpiarFormularioCliente()
+    setMensajeCliente('Cliente eliminado correctamente.')
+    setEliminandoCliente(false)
+  }
+
+  const guardarCliente = async (e) => {
+    e.preventDefault()
+    setMensajeCliente('')
+
+    if (!perfil?.negocio_id) {
+      setMensajeCliente('No se pudo identificar el negocio.')
+      return
+    }
+
+    if (!clienteForm.nombre.trim()) {
+      setMensajeCliente('Ingresa el nombre para continuar.')
+      return
+    }
+
+    if (!clienteForm.rut.trim()) {
+      setMensajeCliente('Ingresa el RUT para continuar.')
+      return
+    }
+
+    if (!clienteForm.telefono.trim()) {
+      setMensajeCliente('Ingresa el teléfono para continuar.')
+      return
+    }
+
+    if (!clienteForm.correo.trim()) {
+      setMensajeCliente('Ingresa el correo para continuar.')
+      return
+    }
+
+    const rutNumerico = clienteForm.rut.replace(/\D/g, '')
+    const telefonoNumerico = clienteForm.telefono.replace(/\D/g, '')
+
+    if (rutNumerico && rutNumerico.length < 7) {
+      setMensajeCliente('Ingresa un RUT válido.')
+      return
+    }
+
+    if (telefonoNumerico && telefonoNumerico.length !== 9) {
+      setMensajeCliente('El teléfono debe tener 9 dígitos después del +56.')
+      return
+    }
+
+    const datosCliente = {
+      negocio_id: perfil.negocio_id,
+      nombre: clienteForm.nombre.trim(),
+      rut: rutNumerico ? formatearRutAutomatico(rutNumerico) : null,
+      telefono: telefonoNumerico ? `+56${telefonoNumerico}` : null,
+      correo: clienteForm.correo.trim() || null,
+      activo: true,
+    }
+
+    setGuardandoCliente(true)
+
+    let resultado
+
+    if (clienteEditando) {
+      resultado = await supabase
+        .from('clientes')
+        .update(datosCliente)
+        .eq('id', clienteEditando.id)
+        .eq('negocio_id', perfil.negocio_id)
+        .select()
+        .single()
+    } else {
+      resultado = await supabase
+        .from('clientes')
+        .insert(datosCliente)
+        .select()
+        .single()
+    }
+
+    if (resultado.error) {
+      console.error('Error guardando cliente:', resultado.error)
+      setMensajeCliente(resultado.error.message)
+      setGuardandoCliente(false)
+      return
+    }
+
+    await cargarClientes(perfil.negocio_id)
+
+    setMostrarFormularioCliente(false)
+    limpiarFormularioCliente()
+    setMensajeCliente(
+      clienteEditando
+        ? 'Cliente actualizado correctamente.'
+        : 'Cliente registrado correctamente.'
+    )
+    setGuardandoCliente(false)
+  }
+
   // =========================
   // CREAR CUENTA
   // =========================
@@ -743,17 +1003,48 @@ const formatearFechaVenta = (fecha) => {
   // =========================
 
   const cerrarSesion = async () => {
-    const { error } = await supabase.auth.signOut()
+    setConfirmarCerrarSesion(false)
+    if (cerrandoSesion) return
 
-    if (error) {
-      console.error(error)
-      return
+    setCerrandoSesion(true)
+
+    try {
+      const { error } = await supabase.auth.signOut()
+
+      if (error) {
+        console.error(error)
+        setCerrandoSesion(false)
+        return
+      }
+
+      setUsuario(null)
+      setCorreo('')
+      setPassword('')
+      setMensaje('')
+
+      // Pequeña pausa para que la transición de cierre se alcance a ver.
+      await new Promise((resolve) => setTimeout(resolve, 900))
+    } finally {
+      setCerrandoSesion(false)
     }
+  }
 
-    setUsuario(null)
-    setCorreo('')
-    setPassword('')
-    setMensaje('')
+  // =========================
+  // CERRANDO SESIÓN
+  // =========================
+
+  if (cerrandoSesion) {
+    return (
+      <div className="logout-screen">
+        <div className="logout-screen-content">
+          <div className="logout-screen-logo">N</div>
+          <h1>NOREVIK</h1>
+          <p>Tu negocio en movimiento.</p>
+          <div className="logout-spinner" aria-hidden="true" />
+          <span>Cerrando sesión...</span>
+        </div>
+      </div>
+    )
   }
 
   // =========================
@@ -844,10 +1135,52 @@ if (usuario) {
     0
   )
 
+  const clientesFiltrados = clientes.filter((cliente) => {
+    const termino = busquedaCliente.trim().toLowerCase()
+
+    if (!termino) return true
+
+    return (
+      cliente.nombre?.toLowerCase().includes(termino) ||
+      cliente.rut?.toLowerCase().includes(termino) ||
+      cliente.telefono?.toLowerCase().includes(termino) ||
+      cliente.correo?.toLowerCase().includes(termino)
+    )
+  })
+
   return (
     <div className="dashboard">
 
-      {/* SIDEBAR */}
+      
+        {confirmarCerrarSesion && !cerrandoSesion && (
+          <div className="logout-confirm-backdrop">
+            <div className="logout-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="logout-confirm-title">
+              <div className="logout-confirm-icon">↪</div>
+              <h2 id="logout-confirm-title">¿Cerrar sesión?</h2>
+              <p>Tu sesión actual se cerrará y volverás a la pantalla de inicio de sesión.</p>
+
+              <div className="logout-confirm-actions">
+                <button
+                  type="button"
+                  className="logout-confirm-cancel"
+                  onClick={() => setConfirmarCerrarSesion(false)}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  className="logout-confirm-accept"
+                  onClick={cerrarSesion}
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+{/* SIDEBAR */}
       <aside className="sidebar">
 
         <div className="sidebar-brand">
@@ -867,7 +1200,7 @@ if (usuario) {
             }`}
             onClick={() => setSeccion('dashboard')}
           >
-            <span>⌂</span>
+            <span>🏠</span>
             Panel de control
           </button>
 
@@ -875,7 +1208,7 @@ if (usuario) {
             className={`menu-item ${seccion === 'ventas' ? 'active' : ''}`}
             onClick={() => setSeccion('ventas')}
           >
-            <span>▣</span>
+            <span>🧾</span>
             Ventas
           </button>
 
@@ -885,7 +1218,7 @@ if (usuario) {
             }`}
             onClick={() => setSeccion('productos')}
           >
-            <span>□</span>
+            <span>📦</span>
             Productos
           </button>
 
@@ -895,12 +1228,15 @@ if (usuario) {
             }`}
             onClick={() => setSeccion('inventario')}
           >
-            <span>▤</span>
+            <span>📋</span>
             Inventario
           </button>
 
-          <button className="menu-item">
-            <span>♙</span>
+          <button
+            className={`menu-item ${seccion === 'clientes' ? 'active' : ''}`}
+            onClick={() => setSeccion('clientes')}
+          >
+            <span>👤</span>
             Clientes
           </button>
 
@@ -922,9 +1258,10 @@ if (usuario) {
           <button
             type="button"
             className="logout-button"
-            onClick={cerrarSesion}
+            onClick={() => setConfirmarCerrarSesion(true)}
+            disabled={cerrandoSesion}
           >
-            Cerrar sesión
+            {cerrandoSesion ? 'Cerrando...' : 'Cerrar sesión'}
           </button>
 
         </div>
@@ -991,7 +1328,7 @@ if (usuario) {
               <article className="stat-card">
                 <div className="stat-top">
                   <span>Productos</span>
-                  <div className="stat-icon">□</div>
+                  <div className="stat-icon">📦</div>
                 </div>
 
                 <strong className="stat-value">{productos.length}</strong>
@@ -1119,7 +1456,7 @@ if (usuario) {
                 </div>
 
                 <div className="empty-state">
-                  <div className="empty-icon">□</div>
+                  <div className="empty-icon">📦</div>
 
                   <strong>Aún no hay productos</strong>
 
@@ -1619,7 +1956,7 @@ if (usuario) {
                 <div className="empty-state"><strong>Cargando productos...</strong></div>
               ) : productos.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-icon">□</div>
+                  <div className="empty-icon">📦</div>
                   <strong>Aún no hay productos</strong>
                   <span>Agrega tu primer producto para comenzar a gestionar el inventario.</span>
                 </div>
@@ -1684,7 +2021,7 @@ if (usuario) {
               <article className="stat-card">
                 <div className="stat-top">
                   <span>Productos</span>
-                  <div className="stat-icon">□</div>
+                  <div className="stat-icon">📦</div>
                 </div>
                 <strong className="stat-value">{productos.length}</strong>
                 <span className="stat-detail">Productos en inventario</span>
@@ -2015,6 +2352,322 @@ if (usuario) {
                 </div>
               )}
             </section>
+          </>
+        )}
+
+        {/* ========================= */}
+        {/* CLIENTES */}
+        {/* ========================= */}
+
+        {seccion === 'clientes' && (
+          <>
+            <header className="dashboard-header">
+              <div>
+                <span className="dashboard-label">CLIENTES</span>
+                <h1>Clientes</h1>
+                <p>Administra los clientes de {negocio} desde un solo lugar.</p>
+              </div>
+
+              <div className="business-name">
+                <span>Negocio</span>
+                <strong>{negocio}</strong>
+              </div>
+            </header>
+
+            <section className="dashboard-stats clients-stats">
+              <article className="stat-card">
+                <div className="stat-top">
+                  <span>Clientes registrados</span>
+                  <div className="stat-icon">♙</div>
+                </div>
+                <strong className="stat-value">{clientes.length}</strong>
+                <span className="stat-detail">Clientes activos</span>
+              </article>
+            </section>
+
+            <section className="dashboard-panel clients-panel">
+              <div className="panel-heading clients-heading">
+                <div className="clients-heading-info">
+                  <h2>Directorio de clientes</h2>
+                  <p>Consulta, registra y actualiza la información de tus clientes.</p>
+                </div>
+
+                <div className="clients-search">
+                  <input
+                    type="search"
+                    value={busquedaCliente}
+                    onChange={(e) => setBusquedaCliente(e.target.value)}
+                    placeholder="Buscar por nombre, RUT, teléfono o correo..."
+                  />
+                </div>
+
+                <button type="button" onClick={abrirNuevoCliente}>
+                  + Nuevo cliente
+                </button>
+              </div>
+
+              {mensajeCliente && (
+                <p className="auth-message clients-message">{mensajeCliente}</p>
+              )}
+
+              {clientes.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">♙</div>
+                  <strong>Aún no hay clientes</strong>
+                  <span>Registra tu primer cliente para comenzar.</span>
+                </div>
+              ) : clientesFiltrados.length === 0 ? (
+                <div className="empty-state">
+                  <strong>No encontramos clientes</strong>
+                  <span>Prueba con otro nombre, RUT, teléfono o correo.</span>
+                </div>
+              ) : (
+                <div className="products-table-wrap">
+                  <table className="products-table clients-table">
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th>RUT</th>
+                        <th>Teléfono</th>
+                        <th>Correo</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {clientesFiltrados.map((cliente) => (
+                        <tr key={cliente.id}>
+                          <td>
+                            <strong>{cliente.nombre}</strong>
+                          </td>
+                          <td>{cliente.rut || '—'}</td>
+                          <td>{cliente.telefono || '—'}</td>
+                          <td>{cliente.correo || '—'}</td>
+                          <td>
+                            <div className="client-row-actions">
+                            <button
+                              type="button"
+                              className="client-edit-button"
+                              onClick={() => abrirEditarCliente(cliente)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="client-delete-button"
+                              onClick={() => solicitarEliminarCliente(cliente)}
+                            >
+                              Eliminar
+                            </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {mostrarFormularioCliente && (
+              <div className="sale-modal-backdrop" onClick={cerrarFormularioCliente}>
+                <div
+                  className="client-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="sale-detail-header">
+                    <div>
+                      <span className="dashboard-label">
+                        {clienteEditando ? 'EDITAR CLIENTE' : 'NUEVO CLIENTE'}
+                      </span>
+                      <h2>
+                        {clienteEditando
+                          ? 'Actualizar cliente'
+                          : 'Registrar cliente'}
+                      </h2>
+                      <p>
+                        {clienteEditando
+                          ? 'Modifica la información guardada del cliente.'
+                          : 'Agrega los datos principales del cliente.'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="stock-modal-close"
+                      onClick={cerrarFormularioCliente}
+                      disabled={guardandoCliente}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <form onSubmit={guardarCliente} className="client-form">
+                    <div className="client-form-grid">
+                      <div className="form-group">
+                        <label>Nombre *</label>
+                        <input
+                          type="text"
+                          value={clienteForm.nombre}
+                          onChange={(e) =>
+                            setClienteForm({
+                              ...clienteForm,
+                              nombre: e.target.value,
+                            })
+                          }
+                          placeholder="Ej: Juan Pérez"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>RUT *</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={clienteForm.rut}
+                          onChange={(e) => cambiarRutCliente(e.target.value)}
+                          placeholder="Ej: 12345678"
+                          maxLength="8"
+                          required
+                        />
+                        <span className="client-field-hint">
+                          {clienteForm.rut
+                            ? `Se guardará como ${formatearRutAutomatico(clienteForm.rut)}`
+                            : 'Escribe solo los números. NOREVIK calcula el dígito verificador.'}
+                        </span>
+                      </div>
+
+                      <div className="form-group">
+                        <label>Teléfono *</label>
+                        <div className="client-phone-input">
+                          <span className="client-phone-prefix">🇨🇱 +56</span>
+                          <input
+                            type="tel"
+                            inputMode="numeric"
+                            value={formatearTelefonoChile(clienteForm.telefono)}
+                            onChange={(e) => cambiarTelefonoCliente(e.target.value)}
+                            placeholder="9 1234 5678"
+                            required
+                          />
+                        </div>
+                        <span className="client-field-hint">
+                          Número móvil de Chile · 9 dígitos
+                        </span>
+                      </div>
+
+                      <div className="form-group">
+                        <label>Correo *</label>
+                        <input
+                          type="email"
+                          value={clienteForm.correo}
+                          onChange={(e) =>
+                            setClienteForm({
+                              ...clienteForm,
+                              correo: e.target.value,
+                            })
+                          }
+                          placeholder="Ej: cliente@correo.cl"
+                          required
+                        />
+                      </div>
+
+                    </div>
+
+                    <div className="client-form-actions">
+                      {clienteEditando && (
+                        <button
+                          type="button"
+                          className="client-delete-modal-button"
+                          onClick={() => solicitarEliminarCliente(clienteEditando)}
+                          disabled={guardandoCliente}
+                        >
+                          Eliminar cliente
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={cerrarFormularioCliente}
+                        disabled={guardandoCliente}
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="login-button"
+                        disabled={guardandoCliente}
+                      >
+                        {guardandoCliente
+                          ? 'Guardando...'
+                          : clienteEditando
+                            ? 'Guardar cambios'
+                            : 'Registrar cliente'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {clientePorEliminar && (
+              <div
+                className="sale-modal-backdrop"
+                onClick={cerrarEliminarCliente}
+              >
+                <div
+                  className="client-delete-confirm-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="stock-modal-close client-delete-close"
+                    onClick={cerrarEliminarCliente}
+                    disabled={eliminandoCliente}
+                  >
+                    ×
+                  </button>
+
+                  <div className="client-delete-icon">♙</div>
+
+                  <span className="dashboard-label">NOREVIK</span>
+                  <h2>¿Eliminar cliente?</h2>
+
+                  <p>
+                    El cliente dejará de aparecer en el listado, pero su registro
+                    se conservará para mantener el historial asociado.
+                  </p>
+
+                  <div className="client-delete-info">
+                    <strong>{clientePorEliminar.nombre}</strong>
+                    <span>RUT: {clientePorEliminar.rut || '—'}</span>
+                    <span>{clientePorEliminar.correo || '—'}</span>
+                    <span>{clientePorEliminar.telefono || '—'}</span>
+                  </div>
+
+                  <div className="norevik-confirm-actions">
+                    <button
+                      type="button"
+                      className="norevik-confirm-cancel"
+                      onClick={cerrarEliminarCliente}
+                      disabled={eliminandoCliente}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      className="norevik-confirm-danger"
+                      onClick={eliminarCliente}
+                      disabled={eliminandoCliente}
+                    >
+                      {eliminandoCliente ? 'Eliminando...' : 'Eliminar cliente'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
