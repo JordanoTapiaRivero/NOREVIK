@@ -66,6 +66,21 @@ const [perfil, setPerfil] = useState(null)
   const [cargandoCaja, setCargandoCaja] = useState(false)
   const [abriendoCaja, setAbriendoCaja] = useState(false)
   const [mensajeCaja, setMensajeCaja] = useState('')
+  const [resumenCaja, setResumenCaja] = useState(null)
+  const [cargandoResumenCaja, setCargandoResumenCaja] = useState(false)
+  const [mostrarMovimientoCaja, setMostrarMovimientoCaja] = useState(false)
+  const [guardandoMovimientoCaja, setGuardandoMovimientoCaja] = useState(false)
+  const [movimientosCaja, setMovimientosCaja] = useState([])
+  const [cargandoMovimientosCaja, setCargandoMovimientosCaja] = useState(false)
+  const [movimientoCajaForm, setMovimientoCajaForm] = useState({
+    tipo: 'entrada',
+    categoria: 'ingreso',
+    monto: '',
+    descripcion: '',
+  })
+  const [mostrarCierreCaja, setMostrarCierreCaja] = useState(false)
+  const [cerrandoCaja, setCerrandoCaja] = useState(false)
+  const [montoFinalCaja, setMontoFinalCaja] = useState('')
 
   // CLIENTES
   const [clientes, setClientes] = useState([])
@@ -76,11 +91,30 @@ const [perfil, setPerfil] = useState(null)
   const [clienteEditando, setClienteEditando] = useState(null)
   const [clientePorEliminar, setClientePorEliminar] = useState(null)
   const [eliminandoCliente, setEliminandoCliente] = useState(false)
+  const [rutClienteEnFoco, setRutClienteEnFoco] = useState(false)
   const [clienteForm, setClienteForm] = useState({
     nombre: '',
     rut: '',
     telefono: '',
     correo: '',
+  })
+
+  // PROVEEDORES
+  const [proveedores, setProveedores] = useState([])
+  const [busquedaProveedor, setBusquedaProveedor] = useState('')
+  const [mostrarFormularioProveedor, setMostrarFormularioProveedor] = useState(false)
+  const [guardandoProveedor, setGuardandoProveedor] = useState(false)
+  const [mensajeProveedor, setMensajeProveedor] = useState('')
+  const [proveedorEditando, setProveedorEditando] = useState(null)
+  const [proveedorPorEliminar, setProveedorPorEliminar] = useState(null)
+  const [eliminandoProveedor, setEliminandoProveedor] = useState(false)
+  const [rutProveedorEnFoco, setRutProveedorEnFoco] = useState(false)
+  const [proveedorForm, setProveedorForm] = useState({
+    nombre: '',
+    rut: '',
+    telefono: '',
+    correo: '',
+    contacto: '',
   })
 
   // =========================
@@ -360,6 +394,15 @@ const cargarMovimientosInventario = async (negocioId) => {
 
   setMovimientosInventario(data ?? [])
 }
+useEffect(() => {
+  if (!mensajeCaja) return
+
+  const timer = setTimeout(() => {
+    setMensajeCaja('')
+  }, 3000)
+
+  return () => clearTimeout(timer)
+}, [mensajeCaja])
 
 useEffect(() => {
   if (perfil?.negocio_id) {
@@ -591,6 +634,7 @@ const registrarVenta = async () => {
     cargarProductos(perfil.negocio_id),
     cargarMovimientosInventario(perfil.negocio_id),
     cargarVentas(perfil.negocio_id),
+    cargarResumenCaja(),
   ])
 
   setCarrito([])
@@ -645,6 +689,7 @@ const anularVenta = async () => {
     cargarProductos(perfil.negocio_id),
     cargarMovimientosInventario(perfil.negocio_id),
     cargarVentas(perfil.negocio_id),
+    cargarResumenCaja(),
   ])
 
   setVentaDetalle(null)
@@ -697,9 +742,45 @@ const formatearFechaVenta = (fecha) => {
     setCargandoCaja(false)
   }
 
+  const cargarMovimientosCaja = async () => {
+    setCargandoMovimientosCaja(true)
+
+    const { data, error } = await supabase.rpc('obtener_movimientos_caja')
+
+    if (error) {
+      console.error('Error cargando movimientos de caja:', error)
+      setMovimientosCaja([])
+      setMensajeCaja('No se pudo cargar el historial de movimientos de caja.')
+      setCargandoMovimientosCaja(false)
+      return
+    }
+
+    setMovimientosCaja(data ?? [])
+    setCargandoMovimientosCaja(false)
+  }
+
+  const cargarResumenCaja = async () => {
+    setCargandoResumenCaja(true)
+
+    const { data, error } = await supabase.rpc('resumen_caja')
+
+    if (error) {
+      console.error('Error cargando resumen de caja:', error)
+      setResumenCaja(null)
+      setMensajeCaja('No se pudo cargar el resumen de la caja.')
+      setCargandoResumenCaja(false)
+      return
+    }
+
+    setResumenCaja(data?.[0] ?? null)
+    setCargandoResumenCaja(false)
+  }
+
   useEffect(() => {
     if (perfil?.negocio_id) {
       cargarCajaActual(perfil.negocio_id)
+      cargarResumenCaja()
+      cargarMovimientosCaja()
     }
   }, [perfil?.negocio_id])
 
@@ -727,10 +808,271 @@ const formatearFechaVenta = (fecha) => {
       return
     }
 
-    await cargarCajaActual(perfil.negocio_id)
+    await Promise.all([
+      cargarCajaActual(perfil.negocio_id),
+      cargarResumenCaja(),
+      cargarMovimientosCaja(),
+    ])
     setMontoInicialCaja('')
     setMensajeCaja('Caja abierta correctamente.')
     setAbriendoCaja(false)
+  }
+
+  const abrirMovimientoCaja = (tipo) => {
+    setMensajeCaja('')
+    setMovimientoCajaForm({
+      tipo,
+      categoria: tipo === 'entrada' ? 'ingreso' : 'gasto',
+      monto: '',
+      descripcion: '',
+    })
+    setMostrarMovimientoCaja(true)
+  }
+
+  const cerrarMovimientoCaja = () => {
+    if (guardandoMovimientoCaja) return
+    setMostrarMovimientoCaja(false)
+    setMovimientoCajaForm({
+      tipo: 'entrada',
+      categoria: 'ingreso',
+      monto: '',
+      descripcion: '',
+    })
+  }
+
+  const cambiarTipoMovimientoCaja = (tipo) => {
+    setMovimientoCajaForm((actual) => ({
+      ...actual,
+      tipo,
+      categoria: tipo === 'entrada' ? 'ingreso' : 'gasto',
+    }))
+  }
+
+  const registrarMovimientoCaja = async (e) => {
+    e.preventDefault()
+    setMensajeCaja('')
+
+    const monto = Number(movimientoCajaForm.monto)
+
+    if (
+      movimientoCajaForm.monto === '' ||
+      Number.isNaN(monto) ||
+      monto <= 0
+    ) {
+      setMensajeCaja('Ingresa un monto válido mayor a 0.')
+      return
+    }
+
+    if (!movimientoCajaForm.categoria) {
+      setMensajeCaja('Selecciona una categoría.')
+      return
+    }
+
+    setGuardandoMovimientoCaja(true)
+
+    const { error } = await supabase.rpc('registrar_movimiento_caja', {
+      p_tipo: movimientoCajaForm.tipo,
+      p_categoria: movimientoCajaForm.categoria,
+      p_monto: monto,
+      p_descripcion: movimientoCajaForm.descripcion.trim() || null,
+    })
+
+    if (error) {
+      console.error('Error registrando movimiento de caja:', error)
+      setMensajeCaja(error.message)
+      setGuardandoMovimientoCaja(false)
+      return
+    }
+
+    await Promise.all([
+      cargarResumenCaja(),
+      cargarMovimientosCaja(),
+    ])
+
+    setMostrarMovimientoCaja(false)
+    setMovimientoCajaForm({
+      tipo: 'entrada',
+      categoria: 'ingreso',
+      monto: '',
+      descripcion: '',
+    })
+    setMensajeCaja(
+      movimientoCajaForm.tipo === 'entrada'
+        ? 'Entrada de efectivo registrada correctamente.'
+        : 'Salida de efectivo registrada correctamente.'
+    )
+    setGuardandoMovimientoCaja(false)
+  }
+
+  const abrirCierreCaja = () => {
+    setMensajeCaja('')
+    setMontoFinalCaja('')
+    setMostrarCierreCaja(true)
+  }
+
+  const cerrarModalCierreCaja = () => {
+    if (cerrandoCaja) return
+    setMostrarCierreCaja(false)
+    setMontoFinalCaja('')
+  }
+
+  const confirmarCierreCaja = async (e) => {
+    e.preventDefault()
+    setMensajeCaja('')
+
+    const montoDeclarado = Number(montoFinalCaja)
+
+    if (montoFinalCaja === '' || Number.isNaN(montoDeclarado) || montoDeclarado < 0) {
+      setMensajeCaja('Ingresa un efectivo contado válido.')
+      return
+    }
+
+    setCerrandoCaja(true)
+
+    const { error } = await supabase.rpc('cerrar_caja', {
+      p_monto_final_declarado: montoDeclarado,
+    })
+
+    if (error) {
+      console.error('Error cerrando caja:', error)
+      setMensajeCaja(error.message)
+      setCerrandoCaja(false)
+      return
+    }
+
+    await Promise.all([
+      cargarCajaActual(perfil.negocio_id),
+      cargarResumenCaja(),
+      cargarMovimientosCaja(),
+    ])
+
+    setMostrarCierreCaja(false)
+    setMontoFinalCaja('')
+    setMensajeCaja('Caja cerrada correctamente.')
+    setCerrandoCaja(false)
+  }
+
+  const diferenciaCierreCaja =
+    montoFinalCaja === '' || Number.isNaN(Number(montoFinalCaja))
+      ? null
+      : Number(montoFinalCaja) - Number(resumenCaja?.efectivo_esperado || 0)
+
+  const estadoDiferenciaCaja =
+    diferenciaCierreCaja === null
+      ? 'Ingresa el efectivo contado'
+      : diferenciaCierreCaja === 0
+        ? 'Caja cuadrada'
+        : diferenciaCierreCaja > 0
+          ? 'Sobrante'
+          : 'Faltante'
+
+  const exportarCierresCajaExcel = async () => {
+    setMensajeCaja('')
+
+    if (!perfil?.negocio_id) {
+      setMensajeCaja('No se pudo identificar el negocio.')
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('cajas')
+      .select(`
+        id,
+        monto_inicial,
+        monto_final_declarado,
+        total_ventas,
+        total_efectivo,
+        total_debito,
+        total_credito,
+        total_transferencia,
+        total_otro,
+        total_entradas,
+        total_salidas,
+        efectivo_esperado,
+        diferencia,
+        cantidad_ventas,
+        abierta_en,
+        cerrada_en,
+        estado
+      `)
+      .eq('negocio_id', perfil.negocio_id)
+      .eq('estado', 'cerrada')
+      .order('cerrada_en', { ascending: false })
+
+    if (error) {
+      console.error('Error exportando cierres de caja:', error)
+      setMensajeCaja('No se pudieron obtener los cierres de caja.')
+      return
+    }
+
+    if (!data || data.length === 0) {
+      setMensajeCaja('Aún no hay cajas cerradas para exportar.')
+      return
+    }
+
+    const datosExcel = data.map((caja) => {
+      const diferencia = Number(caja.diferencia || 0)
+
+      const estadoArqueo =
+        diferencia === 0
+          ? 'Cuadrada'
+          : diferencia > 0
+            ? 'Sobrante'
+            : 'Faltante'
+
+      return {
+        'Fecha apertura': formatearFechaCaja(caja.abierta_en),
+        'Fecha cierre': formatearFechaCaja(caja.cerrada_en),
+        'Monto inicial': Number(caja.monto_inicial || 0),
+        'Ventas totales': Number(caja.total_ventas || 0),
+        'Efectivo': Number(caja.total_efectivo || 0),
+        'Débito': Number(caja.total_debito || 0),
+        'Crédito': Number(caja.total_credito || 0),
+        'Transferencia': Number(caja.total_transferencia || 0),
+        'Otros': Number(caja.total_otro || 0),
+        'Entradas': Number(caja.total_entradas || 0),
+        'Salidas': Number(caja.total_salidas || 0),
+        'Efectivo esperado': Number(caja.efectivo_esperado || 0),
+        'Efectivo contado': Number(caja.monto_final_declarado || 0),
+        'Diferencia': diferencia,
+        'Estado arqueo': estadoArqueo,
+        'N° ventas': Number(caja.cantidad_ventas || 0),
+      }
+    })
+
+    const hoja = XLSX.utils.json_to_sheet(datosExcel)
+
+    hoja['!cols'] = [
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 12 },
+    ]
+
+    const libro = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(libro, hoja, 'Cierres de caja')
+
+    const hoy = new Date()
+    const fecha = [
+      String(hoy.getDate()).padStart(2, '0'),
+      String(hoy.getMonth() + 1).padStart(2, '0'),
+      hoy.getFullYear(),
+    ].join('-')
+
+    XLSX.writeFile(libro, `NOREVIK_Cierres_Caja_${fecha}.xlsx`)
+    setMensajeCaja('Cierres de caja exportados correctamente.')
   }
 
   const formatearFechaCaja = (fecha) => {
@@ -749,36 +1091,51 @@ const formatearFechaVenta = (fecha) => {
   // CLIENTES
   // =========================
 
-  const calcularDigitoVerificadorRut = (rutNumerico) => {
-    if (!rutNumerico) return ''
+  const limpiarRutIngresado = (valor) => {
+    return String(valor || '')
+      .toUpperCase()
+      .replace(/[^0-9K]/g, '')
+      .slice(0, 9)
+  }
+
+  const formatearRutCompleto = (valor) => {
+    const limpio = limpiarRutIngresado(valor)
+    if (limpio.length < 2) return limpio
+
+    const cuerpo = limpio.slice(0, -1)
+    const dv = limpio.slice(-1)
+    const cuerpoFormateado = Number(cuerpo).toLocaleString('es-CL')
+
+    return `${cuerpoFormateado}-${dv}`
+  }
+
+  const validarRutChile = (valor) => {
+    const limpio = limpiarRutIngresado(valor)
+    if (limpio.length < 8 || limpio.length > 9) return false
+
+    const cuerpo = limpio.slice(0, -1)
+    const dvIngresado = limpio.slice(-1)
 
     let suma = 0
     let multiplicador = 2
 
-    for (let i = rutNumerico.length - 1; i >= 0; i -= 1) {
-      suma += Number(rutNumerico[i]) * multiplicador
+    for (let i = cuerpo.length - 1; i >= 0; i -= 1) {
+      suma += Number(cuerpo[i]) * multiplicador
       multiplicador = multiplicador === 7 ? 2 : multiplicador + 1
     }
 
     const resultado = 11 - (suma % 11)
+    const dvCalculado =
+      resultado === 11 ? '0' : resultado === 10 ? 'K' : String(resultado)
 
-    if (resultado === 11) return '0'
-    if (resultado === 10) return 'K'
-    return String(resultado)
-  }
-
-  const formatearRutAutomatico = (valor) => {
-    const cuerpo = String(valor || '').replace(/\D/g, '').slice(0, 8)
-    if (!cuerpo) return ''
-
-    const dv = calcularDigitoVerificadorRut(cuerpo)
-    const cuerpoFormateado = Number(cuerpo).toLocaleString('es-CL')
-    return `${cuerpoFormateado}-${dv}`
+    return dvIngresado === dvCalculado
   }
 
   const cambiarRutCliente = (valor) => {
-    const soloNumeros = String(valor || '').replace(/\D/g, '').slice(0, 8)
-    setClienteForm((actual) => ({ ...actual, rut: soloNumeros }))
+    setClienteForm((actual) => ({
+      ...actual,
+      rut: limpiarRutIngresado(valor),
+    }))
   }
 
   const cambiarTelefonoCliente = (valor) => {
@@ -841,7 +1198,7 @@ const formatearFechaVenta = (fecha) => {
     setClienteEditando(cliente)
     setClienteForm({
       nombre: cliente.nombre || '',
-      rut: (cliente.rut || '').split('-')[0].replace(/\D/g, ''),
+      rut: limpiarRutIngresado(cliente.rut),
       telefono: (cliente.telefono || '').replace(/^\+?56/, '').replace(/\D/g, ''),
       correo: cliente.correo || '',
     })
@@ -924,11 +1281,11 @@ const formatearFechaVenta = (fecha) => {
       return
     }
 
-    const rutNumerico = clienteForm.rut.replace(/\D/g, '')
+    const rutCompleto = limpiarRutIngresado(clienteForm.rut)
     const telefonoNumerico = clienteForm.telefono.replace(/\D/g, '')
 
-    if (rutNumerico && rutNumerico.length < 7) {
-      setMensajeCliente('Ingresa un RUT válido.')
+    if (!validarRutChile(rutCompleto)) {
+      setMensajeCliente('El RUT ingresado no es válido.')
       return
     }
 
@@ -940,7 +1297,7 @@ const formatearFechaVenta = (fecha) => {
     const datosCliente = {
       negocio_id: perfil.negocio_id,
       nombre: clienteForm.nombre.trim(),
-      rut: rutNumerico ? formatearRutAutomatico(rutNumerico) : null,
+      rut: formatearRutCompleto(rutCompleto),
       telefono: telefonoNumerico ? `+56${telefonoNumerico}` : null,
       correo: clienteForm.correo.trim() || null,
       activo: true,
@@ -983,6 +1340,206 @@ const formatearFechaVenta = (fecha) => {
         : 'Cliente registrado correctamente.'
     )
     setGuardandoCliente(false)
+  }
+
+  // =========================
+  // PROVEEDORES
+  // =========================
+
+  const cambiarRutProveedor = (valor) => {
+    setProveedorForm((actual) => ({
+      ...actual,
+      rut: limpiarRutIngresado(valor),
+    }))
+  }
+
+  const cambiarTelefonoProveedor = (valor) => {
+    let soloNumeros = String(valor || '').replace(/\D/g, '')
+    if (soloNumeros.startsWith('56')) soloNumeros = soloNumeros.slice(2)
+    soloNumeros = soloNumeros.slice(0, 9)
+    setProveedorForm((actual) => ({ ...actual, telefono: soloNumeros }))
+  }
+
+  const cargarProveedores = async (negocioId) => {
+    if (!negocioId) return
+
+    const { data, error } = await supabase
+      .from('proveedores')
+      .select('*')
+      .eq('negocio_id', negocioId)
+      .eq('activo', true)
+      .order('creado_en', { ascending: false })
+
+    if (error) {
+      console.error('Error cargando proveedores:', error)
+      setMensajeProveedor('No se pudieron cargar los proveedores.')
+      return
+    }
+
+    setProveedores(data ?? [])
+  }
+
+  useEffect(() => {
+    if (perfil?.negocio_id) {
+      cargarProveedores(perfil.negocio_id)
+    }
+  }, [perfil?.negocio_id])
+
+  const limpiarFormularioProveedor = () => {
+    setProveedorForm({
+      nombre: '',
+      rut: '',
+      telefono: '',
+      correo: '',
+      contacto: '',
+    })
+    setProveedorEditando(null)
+  }
+
+  const abrirNuevoProveedor = () => {
+    limpiarFormularioProveedor()
+    setMensajeProveedor('')
+    setMostrarFormularioProveedor(true)
+  }
+
+  const abrirEditarProveedor = (proveedor) => {
+    setProveedorEditando(proveedor)
+    setProveedorForm({
+      nombre: proveedor.nombre || '',
+      rut: limpiarRutIngresado(proveedor.rut),
+      telefono: (proveedor.telefono || '').replace(/^\+?56/, '').replace(/\D/g, ''),
+      correo: proveedor.correo || '',
+      contacto: proveedor.contacto || '',
+    })
+    setMensajeProveedor('')
+    setMostrarFormularioProveedor(true)
+  }
+
+  const cerrarFormularioProveedor = () => {
+    if (guardandoProveedor) return
+    setMostrarFormularioProveedor(false)
+    limpiarFormularioProveedor()
+    setMensajeProveedor('')
+  }
+
+  const solicitarEliminarProveedor = (proveedor) => {
+    if (!proveedor) return
+    setProveedorPorEliminar(proveedor)
+    setMensajeProveedor('')
+  }
+
+  const cerrarEliminarProveedor = () => {
+    if (eliminandoProveedor) return
+    setProveedorPorEliminar(null)
+  }
+
+  const eliminarProveedor = async () => {
+    if (!proveedorPorEliminar || !perfil?.negocio_id) return
+
+    setEliminandoProveedor(true)
+    setMensajeProveedor('')
+
+    const { error } = await supabase
+      .from('proveedores')
+      .update({ activo: false })
+      .eq('id', proveedorPorEliminar.id)
+      .eq('negocio_id', perfil.negocio_id)
+
+    if (error) {
+      console.error('Error eliminando proveedor:', error)
+      setMensajeProveedor(error.message)
+      setEliminandoProveedor(false)
+      return
+    }
+
+    await cargarProveedores(perfil.negocio_id)
+
+    setProveedorPorEliminar(null)
+    setMostrarFormularioProveedor(false)
+    limpiarFormularioProveedor()
+    setMensajeProveedor('Proveedor eliminado correctamente.')
+    setEliminandoProveedor(false)
+  }
+
+  const guardarProveedor = async (e) => {
+    e.preventDefault()
+    setMensajeProveedor('')
+
+    if (!perfil?.negocio_id) {
+      setMensajeProveedor('No se pudo identificar el negocio.')
+      return
+    }
+
+    if (!proveedorForm.nombre.trim()) {
+      setMensajeProveedor('Ingresa el nombre o razón social.')
+      return
+    }
+
+    if (!proveedorForm.rut.trim()) {
+      setMensajeProveedor('Ingresa el RUT para continuar.')
+      return
+    }
+
+    const rutCompleto = limpiarRutIngresado(proveedorForm.rut)
+    const telefonoNumerico = proveedorForm.telefono.replace(/\D/g, '')
+
+    if (!validarRutChile(rutCompleto)) {
+      setMensajeProveedor('El RUT ingresado no es válido.')
+      return
+    }
+
+    if (telefonoNumerico && telefonoNumerico.length !== 9) {
+      setMensajeProveedor('El teléfono debe tener 9 dígitos después del +56.')
+      return
+    }
+
+    const datosProveedor = {
+      negocio_id: perfil.negocio_id,
+      nombre: proveedorForm.nombre.trim(),
+      rut: formatearRutCompleto(rutCompleto),
+      telefono: telefonoNumerico ? `+56${telefonoNumerico}` : null,
+      correo: proveedorForm.correo.trim() || null,
+      contacto: proveedorForm.contacto.trim() || null,
+      activo: true,
+    }
+
+    setGuardandoProveedor(true)
+
+    let resultado
+
+    if (proveedorEditando) {
+      resultado = await supabase
+        .from('proveedores')
+        .update(datosProveedor)
+        .eq('id', proveedorEditando.id)
+        .eq('negocio_id', perfil.negocio_id)
+        .select()
+        .single()
+    } else {
+      resultado = await supabase
+        .from('proveedores')
+        .insert(datosProveedor)
+        .select()
+        .single()
+    }
+
+    if (resultado.error) {
+      console.error('Error guardando proveedor:', resultado.error)
+      setMensajeProveedor(resultado.error.message)
+      setGuardandoProveedor(false)
+      return
+    }
+
+    await cargarProveedores(perfil.negocio_id)
+
+    setMostrarFormularioProveedor(false)
+    limpiarFormularioProveedor()
+    setMensajeProveedor(
+      proveedorEditando
+        ? 'Proveedor actualizado correctamente.'
+        : 'Proveedor registrado correctamente.'
+    )
+    setGuardandoProveedor(false)
   }
 
   // =========================
@@ -1265,8 +1822,120 @@ if (usuario) {
     )
   })
 
+  const proveedoresFiltrados = proveedores.filter((proveedor) => {
+    const termino = busquedaProveedor.trim().toLowerCase()
+
+    if (!termino) return true
+
+    return (
+      proveedor.nombre?.toLowerCase().includes(termino) ||
+      proveedor.rut?.toLowerCase().includes(termino) ||
+      proveedor.telefono?.toLowerCase().includes(termino) ||
+      proveedor.correo?.toLowerCase().includes(termino) ||
+      proveedor.contacto?.toLowerCase().includes(termino)
+    )
+  })
+
   return (
     <div className="dashboard">
+
+      {mostrarCierreCaja && cajaActual && (
+        <div className="cash-close-backdrop">
+          <div className="cash-close-modal" role="dialog" aria-modal="true" aria-labelledby="cash-close-title">
+            <div className="cash-close-modal-header">
+              <div>
+                <span className="cash-close-kicker">ARQUEO DE CAJA</span>
+                <h2 id="cash-close-title">Cerrar caja</h2>
+                <p>Cuenta el efectivo físico disponible antes de confirmar el cierre.</p>
+              </div>
+
+              <button
+                type="button"
+                className="cash-close-x"
+                onClick={cerrarModalCierreCaja}
+                disabled={cerrandoCaja}
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="cash-close-expected">
+              <span>Efectivo esperado</span>
+              <strong>
+                ${Number(resumenCaja?.efectivo_esperado || 0).toLocaleString('es-CL')}
+              </strong>
+              <small>Inicial + ventas en efectivo + entradas − salidas</small>
+            </div>
+
+            <form className="cash-close-form" onSubmit={confirmarCierreCaja}>
+              <label htmlFor="monto-final-caja">Efectivo contado</label>
+
+              <div className="cash-close-money-input">
+                <span>$</span>
+                <input
+                  id="monto-final-caja"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={montoFinalCaja}
+                  onChange={(e) => setMontoFinalCaja(e.target.value)}
+                  placeholder="0"
+                  autoFocus
+                  disabled={cerrandoCaja}
+                />
+              </div>
+
+              <div
+                className={`cash-close-difference ${
+                  diferenciaCierreCaja === null
+                    ? 'neutral'
+                    : diferenciaCierreCaja === 0
+                      ? 'balanced'
+                      : diferenciaCierreCaja > 0
+                        ? 'surplus'
+                        : 'shortage'
+                }`}
+              >
+                <div>
+                  <span>Diferencia</span>
+                  <strong>
+                    {diferenciaCierreCaja === null
+                      ? '—'
+                      : `${diferenciaCierreCaja > 0 ? '+' : diferenciaCierreCaja < 0 ? '−' : ''}$${Math.abs(diferenciaCierreCaja).toLocaleString('es-CL')}`}
+                  </strong>
+                </div>
+
+                <span className="cash-close-status">{estadoDiferenciaCaja}</span>
+              </div>
+
+              <div className="cash-close-warning">
+                Al confirmar, esta caja quedará cerrada y sus totales serán guardados.
+              </div>
+
+              <div className="cash-close-actions">
+                <button
+                  type="button"
+                  className="cash-close-cancel"
+                  onClick={cerrarModalCierreCaja}
+                  disabled={cerrandoCaja}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  className="cash-close-confirm"
+                  disabled={cerrandoCaja}
+                >
+                  {cerrandoCaja ? 'Cerrando...' : 'Confirmar cierre'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
 
       
         {confirmarCerrarSesion && !cerrandoSesion && (
@@ -1363,6 +2032,14 @@ if (usuario) {
           >
             <span>👤</span>
             Clientes
+          </button>
+
+          <button
+            className={`menu-item ${seccion === 'proveedores' ? 'active' : ''}`}
+            onClick={() => setSeccion('proveedores')}
+          >
+            <span>🚚</span>
+            Proveedores
           </button>
 
         </nav>
@@ -2515,6 +3192,173 @@ if (usuario) {
 
         {seccion === 'caja' && (
           <>
+            {mostrarMovimientoCaja && (
+              <div className="cash-movement-backdrop">
+                <div
+                  className="cash-movement-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="cash-movement-title"
+                >
+                  <div className="cash-movement-modal-header">
+                    <div>
+                      <span className="dashboard-label">MOVIMIENTO DE CAJA</span>
+                      <h2 id="cash-movement-title">
+                        {movimientoCajaForm.tipo === 'entrada'
+                          ? 'Registrar entrada'
+                          : 'Registrar salida'}
+                      </h2>
+                      <p>
+                        {movimientoCajaForm.tipo === 'entrada'
+                          ? 'Agrega efectivo que ingresa a la caja fuera de una venta.'
+                          : 'Registra efectivo que sale físicamente de la caja.'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="cash-movement-close"
+                      onClick={cerrarMovimientoCaja}
+                      disabled={guardandoMovimientoCaja}
+                      aria-label="Cerrar"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <form onSubmit={registrarMovimientoCaja}>
+                    <div className="cash-movement-type">
+                      <button
+                        type="button"
+                        className={movimientoCajaForm.tipo === 'entrada' ? 'active entry' : ''}
+                        onClick={() => cambiarTipoMovimientoCaja('entrada')}
+                        disabled={guardandoMovimientoCaja}
+                      >
+                        + Entrada
+                      </button>
+
+                      <button
+                        type="button"
+                        className={movimientoCajaForm.tipo === 'salida' ? 'active exit' : ''}
+                        onClick={() => cambiarTipoMovimientoCaja('salida')}
+                        disabled={guardandoMovimientoCaja}
+                      >
+                        − Salida
+                      </button>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Categoría</label>
+                      <select
+                        value={movimientoCajaForm.categoria}
+                        onChange={(e) =>
+                          setMovimientoCajaForm((actual) => ({
+                            ...actual,
+                            categoria: e.target.value,
+                          }))
+                        }
+                        disabled={guardandoMovimientoCaja}
+                      >
+                        {movimientoCajaForm.tipo === 'entrada' ? (
+                          <>
+                            <option value="ingreso">Ingreso de efectivo</option>
+                            <option value="devolucion">Devolución recibida</option>
+                            <option value="otro">Otro ingreso</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="gasto">Gasto</option>
+                            <option value="compra">Compra / Mercadería</option>
+                            <option value="retiro">Retiro de efectivo</option>
+                            <option value="devolucion">Devolución a cliente</option>
+                            <option value="otro">Otra salida</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Monto</label>
+                      <div className="cash-money-input">
+                        <span>$</span>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={movimientoCajaForm.monto}
+                          onChange={(e) =>
+                            setMovimientoCajaForm((actual) => ({
+                              ...actual,
+                              monto: e.target.value,
+                            }))
+                          }
+                          placeholder="Ej: 20000"
+                          disabled={guardandoMovimientoCaja}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Descripción <span>(opcional)</span></label>
+                      <input
+                        type="text"
+                        value={movimientoCajaForm.descripcion}
+                        onChange={(e) =>
+                          setMovimientoCajaForm((actual) => ({
+                            ...actual,
+                            descripcion: e.target.value,
+                          }))
+                        }
+                        placeholder={
+                          movimientoCajaForm.tipo === 'entrada'
+                            ? 'Ej: Efectivo adicional para caja'
+                            : 'Ej: Compra de insumos'
+                        }
+                        maxLength="150"
+                        disabled={guardandoMovimientoCaja}
+                      />
+                    </div>
+
+                    <div className="cash-movement-preview">
+                      <span>
+                        {movimientoCajaForm.tipo === 'entrada'
+                          ? 'El efectivo esperado aumentará en'
+                          : 'El efectivo esperado disminuirá en'}
+                      </span>
+                      <strong className={movimientoCajaForm.tipo}>
+                        {movimientoCajaForm.tipo === 'entrada' ? '+' : '−'}$
+                        {Number(movimientoCajaForm.monto || 0).toLocaleString('es-CL')}
+                      </strong>
+                    </div>
+
+                    <div className="cash-movement-actions">
+                      <button
+                        type="button"
+                        className="cash-movement-cancel"
+                        onClick={cerrarMovimientoCaja}
+                        disabled={guardandoMovimientoCaja}
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="submit"
+                        className={`cash-movement-save ${movimientoCajaForm.tipo}`}
+                        disabled={guardandoMovimientoCaja}
+                      >
+                        {guardandoMovimientoCaja
+                          ? 'Registrando...'
+                          : movimientoCajaForm.tipo === 'entrada'
+                            ? 'Registrar entrada'
+                            : 'Registrar salida'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             <header className="dashboard-header">
               <div>
                 <span className="dashboard-label">CAJA</span>
@@ -2574,6 +3418,25 @@ if (usuario) {
                       {abriendoCaja ? 'Abriendo caja...' : 'Abrir caja'}
                     </button>
                   </form>
+
+                  <div className="cash-export-card">
+                    <div className="cash-export-icon">📊</div>
+
+                    <div className="cash-export-copy">
+                      <strong>Historial de cierres</strong>
+                      <span>
+                        Descarga todos los cierres de caja registrados en Excel.
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="cash-export-button"
+                      onClick={exportarCierresCajaExcel}
+                    >
+                      Exportar Excel
+                    </button>
+                  </div>
                 </div>
               </section>
             ) : (
@@ -2614,32 +3477,153 @@ if (usuario) {
                 <section className="dashboard-panel cash-panel">
                   <div className="panel-heading cash-heading">
                     <div>
-                      <h2>Caja actual</h2>
-                      <p>Las nuevas ventas quedarán vinculadas a esta jornada.</p>
+                      <h2>Resumen de la caja actual</h2>
+                      <p>Ventas acumuladas desde la apertura de esta caja.</p>
                     </div>
-                    <span className="cash-status-badge open">Caja abierta</span>
+                    <div className="cash-heading-actions">
+                      <button
+                        type="button"
+                        className="cash-entry-button"
+                        onClick={() => abrirMovimientoCaja('entrada')}
+                      >
+                        + Entrada
+                      </button>
+                      <button
+                        type="button"
+                        className="cash-exit-button"
+                        onClick={() => abrirMovimientoCaja('salida')}
+                      >
+                        − Salida
+                      </button>
+                      <span className="cash-status-badge open">Caja abierta</span>
+                    
+                  <button
+                    type="button"
+                    className="cash-close-button"
+                    onClick={abrirCierreCaja}
+                  >
+                    Cerrar caja
+                  </button>
+</div>
                   </div>
 
-                  <div className="cash-current-info">
-                    <div>
-                      <span>Monto inicial</span>
-                      <strong>
-                        ${Number(cajaActual.monto_inicial || 0).toLocaleString('es-CL')}
-                      </strong>
+                  {cargandoResumenCaja ? (
+                    <div className="cash-summary-loading">
+                      Actualizando resumen de caja...
                     </div>
-                    <div>
-                      <span>Abierta desde</span>
-                      <strong>{formatearFechaCaja(cajaActual.abierta_en)}</strong>
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="cash-summary-highlight">
+                        <div>
+                          <span>Total vendido</span>
+                          <strong>
+                            ${Number(resumenCaja?.total_ventas || 0).toLocaleString('es-CL')}
+                          </strong>
+                          <small>
+                            {Number(resumenCaja?.cantidad_ventas || 0)}{' '}
+                            {Number(resumenCaja?.cantidad_ventas || 0) === 1
+                              ? 'venta completada'
+                              : 'ventas completadas'}
+                          </small>
+                        </div>
 
-                  <div className="cash-next-note">
-                    <strong>✓ Caja lista para operar</strong>
-                    <span>
-                      Ya puedes registrar ventas. En el siguiente paso agregaremos el
-                      resumen por método de pago y el cierre de caja.
-                    </span>
-                  </div>
+                        <div className="cash-expected-card">
+                          <span>Efectivo esperado</span>
+                          <strong>
+                            ${Number(resumenCaja?.efectivo_esperado ?? cajaActual.monto_inicial ?? 0).toLocaleString('es-CL')}
+                          </strong>
+                          <small>Inicial + efectivo + entradas − salidas</small>
+                        </div>
+                      </div>
+
+                      <div className="cash-payment-grid">
+                        <article><span>Efectivo</span><strong>${Number(resumenCaja?.total_efectivo || 0).toLocaleString('es-CL')}</strong></article>
+                        <article><span>Débito</span><strong>${Number(resumenCaja?.total_debito || 0).toLocaleString('es-CL')}</strong></article>
+                        <article><span>Crédito</span><strong>${Number(resumenCaja?.total_credito || 0).toLocaleString('es-CL')}</strong></article>
+                        <article><span>Transferencia</span><strong>${Number(resumenCaja?.total_transferencia || 0).toLocaleString('es-CL')}</strong></article>
+                        <article><span>Otros</span><strong>${Number(resumenCaja?.total_otro || 0).toLocaleString('es-CL')}</strong></article>
+                      </div>
+
+                      <div className="cash-movement-summary">
+                        <article className="cash-movement-summary-card entry">
+                          <span>Otras entradas</span>
+                          <strong>
+                            +${Number(resumenCaja?.total_entradas || 0).toLocaleString('es-CL')}
+                          </strong>
+                        </article>
+
+                        <article className="cash-movement-summary-card exit">
+                          <span>Salidas de efectivo</span>
+                          <strong>
+                            −${Number(resumenCaja?.total_salidas || 0).toLocaleString('es-CL')}
+                          </strong>
+                        </article>
+                      </div>
+
+                      <div className="cash-current-info">
+                        <div>
+                          <span>Monto inicial</span>
+                          <strong>${Number(resumenCaja?.monto_inicial ?? cajaActual.monto_inicial ?? 0).toLocaleString('es-CL')}</strong>
+                        </div>
+                        <div>
+                          <span>Abierta desde</span>
+                          <strong>{formatearFechaCaja(resumenCaja?.abierta_en ?? cajaActual.abierta_en)}</strong>
+                        </div>
+                      </div>
+
+                      <div className="cash-next-note">
+                        <strong>✓ Resumen actualizado</strong>
+                        <span>
+                          El efectivo esperado considera el monto inicial, las ventas pagadas en efectivo,
+                          las entradas adicionales y las salidas de efectivo. Débito, crédito y transferencia
+                          forman parte del total vendido, pero no del efectivo físico.
+                        </span>
+                      </div>
+
+                      <div className="cash-history">
+                        <div className="cash-history-heading">
+                          <div>
+                            <h3>Movimientos de efectivo</h3>
+                            <p>Entradas y salidas registradas durante la caja actual.</p>
+                          </div>
+                          <span>{movimientosCaja.length} movimiento{movimientosCaja.length === 1 ? '' : 's'}</span>
+                        </div>
+
+                        {cargandoMovimientosCaja ? (
+                          <div className="cash-history-empty">Cargando movimientos...</div>
+                        ) : movimientosCaja.length === 0 ? (
+                          <div className="cash-history-empty">
+                            Aún no hay entradas o salidas adicionales registradas.
+                          </div>
+                        ) : (
+                          <div className="cash-history-list">
+                            {movimientosCaja.map((movimiento) => (
+                              <div className="cash-history-row" key={movimiento.id}>
+                                <div className={`cash-history-icon ${movimiento.tipo}`}>
+                                  {movimiento.tipo === 'entrada' ? '↑' : '↓'}
+                                </div>
+
+                                <div className="cash-history-info">
+                                  <div>
+                                    <strong>{movimiento.descripcion || (movimiento.tipo === 'entrada' ? 'Entrada de efectivo' : 'Salida de efectivo')}</strong>
+                                    <span className={`cash-history-type ${movimiento.tipo}`}>
+                                      {movimiento.tipo === 'entrada' ? 'Entrada' : 'Salida'} · {movimiento.categoria || 'otro'}
+                                    </span>
+                                  </div>
+                                  <small>{formatearFechaCaja(movimiento.creado_en)}</small>
+                                </div>
+
+                                <strong className={`cash-history-amount ${movimiento.tipo}`}>
+                                  {movimiento.tipo === 'entrada' ? '+' : '−'}$
+                                  {Number(movimiento.monto || 0).toLocaleString('es-CL')}
+                                </strong>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </section>
               </>
             )}
@@ -2815,17 +3799,19 @@ if (usuario) {
                         <label>RUT *</label>
                         <input
                           type="text"
-                          inputMode="numeric"
-                          value={clienteForm.rut}
+                          inputMode="text"
+                          value={rutClienteEnFoco ? clienteForm.rut : formatearRutCompleto(clienteForm.rut)}
+                          onFocus={() => setRutClienteEnFoco(true)}
+                          onBlur={() => setRutClienteEnFoco(false)}
                           onChange={(e) => cambiarRutCliente(e.target.value)}
                           placeholder="Ej: 12345678"
-                          maxLength="8"
+                          maxLength="9"
                           required
                         />
                         <span className="client-field-hint">
                           {clienteForm.rut
-                            ? `Se guardará como ${formatearRutAutomatico(clienteForm.rut)}`
-                            : 'Escribe solo los números. NOREVIK calcula el dígito verificador.'}
+                            ? `Se guardará como ${formatearRutCompleto(clienteForm.rut)}`
+                            : 'Ingresa el RUT completo, incluyendo el dígito verificador.'}
                         </span>
                       </div>
 
@@ -2954,6 +3940,320 @@ if (usuario) {
                       disabled={eliminandoCliente}
                     >
                       {eliminandoCliente ? 'Eliminando...' : 'Eliminar cliente'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ========================= */}
+        {/* PROVEEDORES */}
+        {/* ========================= */}
+
+        {seccion === 'proveedores' && (
+          <>
+            <header className="dashboard-header">
+              <div>
+                <span className="dashboard-label">PROVEEDORES</span>
+                <h1>Proveedores</h1>
+                <p>Administra los proveedores de {negocio} desde un solo lugar.</p>
+              </div>
+
+              <div className="business-name">
+                <span>Negocio</span>
+                <strong>{negocio}</strong>
+              </div>
+            </header>
+
+            <section className="dashboard-stats clients-stats">
+              <article className="stat-card">
+                <div className="stat-top">
+                  <span>Proveedores registrados</span>
+                  <div className="stat-icon">🚚</div>
+                </div>
+                <strong className="stat-value">{proveedores.length}</strong>
+                <span className="stat-detail">Proveedores activos</span>
+              </article>
+            </section>
+
+            <section className="dashboard-panel clients-panel">
+              <div className="panel-heading clients-heading">
+                <div className="clients-heading-info">
+                  <h2>Directorio de proveedores</h2>
+                  <p>Consulta, registra y actualiza la información de tus proveedores.</p>
+                </div>
+
+                <div className="clients-search">
+                  <input
+                    type="search"
+                    value={busquedaProveedor}
+                    onChange={(e) => setBusquedaProveedor(e.target.value)}
+                    placeholder="Buscar por nombre, RUT, contacto o correo..."
+                  />
+                </div>
+
+                <button type="button" onClick={abrirNuevoProveedor}>
+                  + Nuevo proveedor
+                </button>
+              </div>
+
+              {mensajeProveedor && (
+                <p className="auth-message clients-message">{mensajeProveedor}</p>
+              )}
+
+              {proveedores.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">🚚</div>
+                  <strong>Aún no hay proveedores</strong>
+                  <span>Registra tu primer proveedor para comenzar.</span>
+                </div>
+              ) : proveedoresFiltrados.length === 0 ? (
+                <div className="empty-state">
+                  <strong>No encontramos proveedores</strong>
+                  <span>Prueba con otro nombre, RUT, contacto o correo.</span>
+                </div>
+              ) : (
+                <div className="products-table-wrap">
+                  <table className="products-table clients-table">
+                    <thead>
+                      <tr>
+                        <th>Proveedor</th>
+                        <th>RUT</th>
+                        <th>Contacto</th>
+                        <th>Teléfono</th>
+                        <th>Correo</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {proveedoresFiltrados.map((proveedor) => (
+                        <tr key={proveedor.id}>
+                          <td><strong>{proveedor.nombre}</strong></td>
+                          <td>{proveedor.rut || '—'}</td>
+                          <td>{proveedor.contacto || '—'}</td>
+                          <td>{proveedor.telefono || '—'}</td>
+                          <td>{proveedor.correo || '—'}</td>
+                          <td>
+                            <div className="client-row-actions">
+                              <button
+                                type="button"
+                                className="client-edit-button"
+                                onClick={() => abrirEditarProveedor(proveedor)}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                className="client-delete-button"
+                                onClick={() => solicitarEliminarProveedor(proveedor)}
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {mostrarFormularioProveedor && (
+              <div className="sale-modal-backdrop" onClick={cerrarFormularioProveedor}>
+                <div className="client-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="sale-detail-header">
+                    <div>
+                      <span className="dashboard-label">
+                        {proveedorEditando ? 'EDITAR PROVEEDOR' : 'NUEVO PROVEEDOR'}
+                      </span>
+                      <h2>
+                        {proveedorEditando ? 'Actualizar proveedor' : 'Registrar proveedor'}
+                      </h2>
+                      <p>
+                        {proveedorEditando
+                          ? 'Modifica la información guardada del proveedor.'
+                          : 'Agrega los datos principales del proveedor.'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="stock-modal-close"
+                      onClick={cerrarFormularioProveedor}
+                      disabled={guardandoProveedor}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <form onSubmit={guardarProveedor} className="client-form">
+                    <div className="client-form-grid">
+                      <div className="form-group">
+                        <label>Nombre / Razón social *</label>
+                        <input
+                          type="text"
+                          value={proveedorForm.nombre}
+                          onChange={(e) =>
+                            setProveedorForm({ ...proveedorForm, nombre: e.target.value })
+                          }
+                          placeholder="Ej: Distribuidora Central SpA"
+                          autoFocus
+                          required
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>RUT *</label>
+                        <input
+                          type="text"
+                          inputMode="text"
+                          value={rutProveedorEnFoco ? proveedorForm.rut : formatearRutCompleto(proveedorForm.rut)}
+                          onFocus={() => setRutProveedorEnFoco(true)}
+                          onBlur={() => setRutProveedorEnFoco(false)}
+                          onChange={(e) => cambiarRutProveedor(e.target.value)}
+                          placeholder="Ej: 76123456"
+                          maxLength="9"
+                          required
+                        />
+                        <span className="client-field-hint">
+                          {proveedorForm.rut
+                            ? `Se guardará como ${formatearRutCompleto(proveedorForm.rut)}`
+                            : 'Ingresa el RUT completo, incluyendo el dígito verificador.'}
+                        </span>
+                      </div>
+
+                      <div className="form-group">
+                        <label>Nombre de contacto</label>
+                        <input
+                          type="text"
+                          value={proveedorForm.contacto}
+                          onChange={(e) =>
+                            setProveedorForm({ ...proveedorForm, contacto: e.target.value })
+                          }
+                          placeholder="Ej: María González"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Teléfono</label>
+                        <div className="client-phone-input">
+                          <span className="client-phone-prefix">🇨🇱 +56</span>
+                          <input
+                            type="tel"
+                            inputMode="numeric"
+                            value={formatearTelefonoChile(proveedorForm.telefono)}
+                            onChange={(e) => cambiarTelefonoProveedor(e.target.value)}
+                            placeholder="9 1234 5678"
+                          />
+                        </div>
+                        <span className="client-field-hint">
+                          Número móvil de Chile · 9 dígitos
+                        </span>
+                      </div>
+
+                      <div className="form-group">
+                        <label>Correo</label>
+                        <input
+                          type="email"
+                          value={proveedorForm.correo}
+                          onChange={(e) =>
+                            setProveedorForm({ ...proveedorForm, correo: e.target.value })
+                          }
+                          placeholder="Ej: ventas@proveedor.cl"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="client-form-actions">
+                      {proveedorEditando && (
+                        <button
+                          type="button"
+                          className="client-delete-modal-button"
+                          onClick={() => solicitarEliminarProveedor(proveedorEditando)}
+                          disabled={guardandoProveedor}
+                        >
+                          Eliminar proveedor
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={cerrarFormularioProveedor}
+                        disabled={guardandoProveedor}
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="login-button"
+                        disabled={guardandoProveedor}
+                      >
+                        {guardandoProveedor
+                          ? 'Guardando...'
+                          : proveedorEditando
+                            ? 'Guardar cambios'
+                            : 'Registrar proveedor'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {proveedorPorEliminar && (
+              <div className="sale-modal-backdrop" onClick={cerrarEliminarProveedor}>
+                <div
+                  className="client-delete-confirm-modal"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="stock-modal-close client-delete-close"
+                    onClick={cerrarEliminarProveedor}
+                    disabled={eliminandoProveedor}
+                  >
+                    ×
+                  </button>
+
+                  <div className="client-delete-icon">🚚</div>
+                  <span className="dashboard-label">NOREVIK</span>
+                  <h2>¿Eliminar proveedor?</h2>
+
+                  <p>
+                    El proveedor dejará de aparecer en el listado, pero su registro
+                    se conservará para mantener el historial asociado.
+                  </p>
+
+                  <div className="client-delete-info">
+                    <strong>{proveedorPorEliminar.nombre}</strong>
+                    <span>RUT: {proveedorPorEliminar.rut || '—'}</span>
+                    <span>{proveedorPorEliminar.contacto || 'Sin contacto'}</span>
+                    <span>{proveedorPorEliminar.correo || '—'}</span>
+                    <span>{proveedorPorEliminar.telefono || '—'}</span>
+                  </div>
+
+                  <div className="norevik-confirm-actions">
+                    <button
+                      type="button"
+                      className="norevik-confirm-cancel"
+                      onClick={cerrarEliminarProveedor}
+                      disabled={eliminandoProveedor}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      className="norevik-confirm-danger"
+                      onClick={eliminarProveedor}
+                      disabled={eliminandoProveedor}
+                    >
+                      {eliminandoProveedor ? 'Eliminando...' : 'Eliminar proveedor'}
                     </button>
                   </div>
                 </div>
